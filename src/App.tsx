@@ -13,6 +13,7 @@ import { ProductProvider } from "./context/ProductContext";
 // Components
 import Navbar from "./components/layout/Navbar";
 import Footer from "./components/layout/Footer";
+import GlobalBottomSections from "./components/sections/GlobalBottomSections";
 import Home from "./pages/Home";
 import Products from "./pages/Products";
 import ProductDetail from "./pages/ProductDetail";
@@ -22,6 +23,13 @@ import Checkout from "./pages/Checkout";
 import Auth from "./pages/Auth";
 import AdminDashboard from "./pages/AdminDashboard";
 import Testimonials from "./pages/Testimonials";
+import About from "./pages/About";
+import CareGuide from "./pages/CareGuide";
+import Contact from "./pages/Contact";
+import FAQ from "./pages/FAQ";
+import NotFound from "./pages/NotFound";
+import Privacy from "./pages/Privacy";
+import Shipping from "./pages/Shipping";
 
 function ScrollToTop() {
   const { pathname, search } = useLocation();
@@ -81,9 +89,17 @@ export default function App() {
                   <Route path="/login" element={<Auth mode="login" />} />
                   <Route path="/register" element={<Auth mode="register" />} />
                   <Route path="/testimonials" element={<Testimonials />} />
+                  <Route path="/about" element={<About />} />
+                  <Route path="/care-guide" element={<CareGuide />} />
+                  <Route path="/contact" element={<Contact />} />
+                  <Route path="/faq" element={<FAQ />} />
+                  <Route path="/privacy" element={<Privacy />} />
+                  <Route path="/shipping" element={<Shipping />} />
+                  <Route path="*" element={<NotFound />} />
                 </Routes>
               </main>
 
+              <GlobalBottomSections />
               <Footer />
               <WhatsAppButton />
             </div>

@@ -15,6 +15,7 @@ export default function Products() {
   const [activeGuide, setActiveGuide] = useState<number | null>(null);
 
   const activeCategory = searchParams.get("category") || "ALL PRODUCTS";
+  const searchQuery = searchParams.get("search")?.trim() || "";
 
   const categories = [
     "ALL PRODUCTS",
@@ -80,7 +81,7 @@ export default function Products() {
     "Gifts": {
       title: "Curated Gifts",
       subtitle: "Charming presentations, signature wrapping, and heirloom-quality surprises.",
-      image: "https://images.unsplash.com/photo-1549417229-aa67d3263c09?auto=format&fit=crop&q=80&w=2000"
+      image: "https://plus.unsplash.com/premium_photo-1661758284381-37eca4009fde?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8b3BlbmluZyUyMGdpZnR8ZW58MHx8MHx8fDA%3D"
     }
   };
 
@@ -97,6 +98,10 @@ export default function Products() {
   };
 
   const currentContent = categoryContent[activeCategory as keyof typeof categoryContent] || categoryContent["ALL PRODUCTS"];
+  const heroTitle = searchQuery ? `Search: ${searchQuery}` : currentContent.title;
+  const heroSubtitle = searchQuery
+    ? "Browse matching Saiksha pieces by product name, category, materials, stones, and description."
+    : currentContent.subtitle;
 
   const filteredProducts = useMemo(() => {
     let result = [...products];
@@ -129,6 +134,25 @@ export default function Products() {
       result = result.filter(p => p.category === "Gifts");
     }
 
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter((p) => {
+        const searchableText = [
+          p.name,
+          p.category,
+          p.description,
+          p.materials,
+          p.stones,
+          p.customText,
+          p.certification,
+          p.packaging,
+          ...(p.careInstructions || []),
+        ].filter(Boolean).join(" ").toLowerCase();
+
+        return searchableText.includes(query);
+      });
+    }
+
     if (sortBy === "price-low") {
       result.sort((a, b) => a.price - b.price);
     } else if (sortBy === "price-high") {
@@ -138,7 +162,7 @@ export default function Products() {
     }
 
     return result;
-  }, [activeCategory, sortBy]);
+  }, [activeCategory, products, searchQuery, sortBy]);
 
   const toggleCategory = (cat: string) => {
     if (cat === "ALL PRODUCTS") {
@@ -146,6 +170,7 @@ export default function Products() {
     } else {
       searchParams.set("category", cat);
     }
+    searchParams.delete("search");
     setSearchParams(searchParams);
   };
 
@@ -183,7 +208,7 @@ export default function Products() {
             transition={{ delay: 0.1 }}
             className="text-5xl md:text-7xl font-serif text-white drop-shadow-md"
           >
-            {formatTitle(currentContent.title)}
+            {formatTitle(heroTitle)}
           </motion.h1>
           <motion.p
             initial={{ y: 20, opacity: 0 }}
@@ -191,7 +216,7 @@ export default function Products() {
             transition={{ delay: 0.2 }}
             className="max-w-lg text-white/90 text-sm font-light tracking-wide leading-relaxed"
           >
-            {currentContent.subtitle}
+            {heroSubtitle}
           </motion.p>
         </div>
       </section>
@@ -200,36 +225,58 @@ export default function Products() {
       <div className="max-w-7xl mx-auto px-6 md:px-10 -mt-16 relative z-10">
         <div className="bg-white rounded-sm shadow-xl shadow-black/5 p-6 md:p-10">
           {/* Controls Bar */}
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6 pb-8 border-b border-black/5 mb-10">
-            <div className="flex items-center space-x-6 overflow-x-auto w-full no-scrollbar">
-              {categories.map(cat => (
+          <div className="flex flex-col gap-6 pb-8 border-b border-black/5 mb-10">
+            {searchQuery && (
+              <div className="w-full flex items-center justify-between gap-4 bg-brand-cream/40 border border-black/5 px-4 py-3 rounded-sm">
+                <div className="flex items-center gap-2 text-sm text-neutral-600">
+                  <Search size={15} className="text-brand-rosegold" />
+                  <span>
+                    Showing results for <strong className="text-brand-ink">"{searchQuery}"</strong>
+                  </span>
+                </div>
                 <button
-                  key={cat}
-                  onClick={() => toggleCategory(cat)}
-                  className={cn(
-                    "whitespace-nowrap text-[10px] md:text-[11px] uppercase tracking-[1.5px] font-bold transition-all border-b-2 pb-1",
-                    activeCategory === cat
-                      ? "text-brand-ink border-brand-rosegold"
-                      : "text-neutral-400 border-transparent hover:text-brand-ink"
-                  )}
+                  onClick={() => {
+                    searchParams.delete("search");
+                    setSearchParams(searchParams);
+                  }}
+                  className="p-1 text-neutral-400 hover:text-brand-ink"
+                  aria-label="Clear search"
                 >
-                  {cat}
+                  <X size={16} />
                 </button>
-              ))}
-            </div>
+              </div>
+            )}
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex items-center space-x-6 overflow-x-auto w-full no-scrollbar">
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => toggleCategory(cat)}
+                    className={cn(
+                      "whitespace-nowrap text-[10px] md:text-[11px] uppercase tracking-[1.5px] font-bold transition-all border-b-2 pb-1",
+                      activeCategory === cat
+                        ? "text-brand-ink border-brand-rosegold"
+                        : "text-neutral-400 border-transparent hover:text-brand-ink"
+                    )}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
 
-            <div className="flex items-center space-x-4 shrink-0">
-              <span className="text-[10px] uppercase tracking-widest text-neutral-400 font-bold">Sort By</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="bg-transparent text-[10px] uppercase tracking-[1.5px] font-bold border-none outline-none cursor-pointer text-brand-ink"
-              >
-                <option value="featured">Featured</option>
-                <option value="price-low">Low To High</option>
-                <option value="price-high">High To Low</option>
-                <option value="rating">Best Rated</option>
-              </select>
+              <div className="flex items-center space-x-4 shrink-0">
+                <span className="text-[10px] uppercase tracking-widest text-neutral-400 font-bold">Sort By</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="bg-transparent text-[10px] uppercase tracking-[1.5px] font-bold border-none outline-none cursor-pointer text-brand-ink"
+                >
+                  <option value="featured">Featured</option>
+                  <option value="price-low">Low To High</option>
+                  <option value="price-high">High To Low</option>
+                  <option value="rating">Best Rated</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -244,7 +291,11 @@ export default function Products() {
               <Sparkles className="mx-auto text-neutral-200" size={48} />
               <p className="text-neutral-500 font-serif text-xl">No pieces found in this category yet.</p>
               <button
-                onClick={() => toggleCategory("ALL PRODUCTS")}
+                onClick={() => {
+                  searchParams.delete("category");
+                  searchParams.delete("search");
+                  setSearchParams(searchParams);
+                }}
                 className="text-xs uppercase tracking-widest font-bold border-b border-black pb-1"
               >
                 Clear Filters

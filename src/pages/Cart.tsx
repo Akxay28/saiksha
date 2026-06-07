@@ -2,14 +2,20 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, ShieldCheck, Truck, Sparkles, ReceiptText } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import { useProducts } from "../context/ProductContext";
 import { cn } from "../lib/utils";
 import { motion } from "motion/react";
 
 export default function Cart() {
-  const { cart, removeFromCart, updateQuantity, cartTotal } = useCart();
+  const { cart, addToCart, removeFromCart, updateQuantity, cartTotal } = useCart();
+  const { products } = useProducts();
 
   const shipping = cartTotal > 5000 ? 0 : 150;
   const total = cartTotal + shipping;
+  const cartIds = new Set(cart.map((item) => item.id));
+  const recommendedProducts = products
+    .filter((product) => !cartIds.has(product.id) && product.stock > 0)
+    .slice(0, 4);
 
   const handleCheckout = () => {
     if (cart.length === 0) return;
@@ -134,6 +140,62 @@ export default function Cart() {
               </div>
             </motion.div>
           ))}
+
+          {recommendedProducts.length > 0 && (
+            <section className="pt-6">
+              <div className="flex items-end justify-between gap-6 mb-6">
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase tracking-[3px] text-brand-rosegold font-bold">Complete The Look</span>
+                  <h2 className="text-2xl font-serif text-brand-ink">You may also love</h2>
+                </div>
+                <Link to="/collection" className="hidden sm:inline-flex text-[10px] uppercase tracking-[2px] font-bold text-neutral-400 hover:text-brand-ink border-b border-transparent hover:border-brand-ink pb-1">
+                  View all
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {recommendedProducts.map((product) => (
+                  <motion.div
+                    key={product.id}
+                    initial={{ opacity: 0, y: 14 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    className="group"
+                  >
+                    <Link to={`/product/${product.id}`} className="block">
+                      <div className="relative aspect-[3/4] overflow-hidden bg-brand-cream rounded-sm border border-black/5">
+                        <img
+                          src={product.images[0]}
+                          alt={product.name}
+                          referrerPolicy="no-referrer"
+                          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300 p-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              addToCart(product);
+                            }}
+                            className="w-full bg-white/95 text-brand-ink py-2 text-[9px] uppercase tracking-[1.5px] font-bold shadow-sm hover:bg-brand-ink hover:text-white transition-colors"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                      <div className="pt-3 space-y-1">
+                        <p className="text-xs font-serif text-brand-ink leading-tight line-clamp-2">{product.name}</p>
+                        <p className="text-[10px] uppercase tracking-widest text-neutral-400">{product.category}</p>
+                        <p className="text-xs font-bold text-brand-ink">
+                          ₹{(product.isSale && product.salePrice ? product.salePrice : product.price).toLocaleString()}
+                        </p>
+                      </div>
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
 
         {/* Summary Card */}

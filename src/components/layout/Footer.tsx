@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Instagram, Mail, ArrowRight, ShieldCheck, Facebook } from "lucide-react";
 import { toast } from "sonner";
-import logoImg from "../../assets/images/saiksha_logo_1780685763441.png";
+import blackLogoImg from "../../assets/images/saiksha-logo-black.jpeg";
 
 export default function Footer() {
   const [email, setEmail] = useState("");
@@ -46,12 +46,12 @@ export default function Footer() {
           {/* LEFT: Brands, Copy guidelines, navigational directory */}
           <div className="lg:col-span-7 space-y-12">
             <div className="space-y-6">
-              <div className="flex items-center gap-3.5">
-                <div className="bg-white p-1 rounded-full border border-white/10 shadow-lg shrink-0">
+              <div className="flex items-center gap-4">
+                <div className="bg-black rounded-full border border-white/10 shadow-lg shrink-0 overflow-hidden">
                   <img
-                    src={logoImg}
-                    alt="Saiksha Logo"
-                    className="h-10 w-10 md:h-12 md:w-12 object-contain rounded-full"
+                    src={blackLogoImg}
+                    alt="Saiksha Jewellery logo"
+                    className="h-14 w-14 md:h-16 md:w-16 object-cover"
                     referrerPolicy="no-referrer"
                   />
                 </div>
@@ -77,9 +77,12 @@ export default function Footer() {
                 <h4 className="text-[10px] uppercase tracking-[3px] text-brand-rosegold font-bold">Journal & Help</h4>
                 <ul className="space-y-2.5 text-xs text-neutral-400 font-light">
                   <li><Link to="/shipping" className="hover:text-white transition-colors">Shipping & Returns</Link></li>
+                  <li><Link to="/testimonials" className="hover:text-white transition-colors">Customer Reviews</Link></li>
+                  <li><Link to="/faq" className="hover:text-white transition-colors">FAQs</Link></li>
                   <li><Link to="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
-                  <li><a href="#" className="hover:text-white transition-colors">Care & Assembly</a></li>
-                  <li><a href="#" className="hover:text-white transition-colors">Heritage Logbook</a></li>
+                  <li><Link to="/care-guide" className="hover:text-white transition-colors">Care Guide</Link></li>
+                  <li><Link to="/about" className="hover:text-white transition-colors">Our Story</Link></li>
+                  <li><Link to="/contact" className="hover:text-white transition-colors">Contact Support</Link></li>
                 </ul>
               </div>
 

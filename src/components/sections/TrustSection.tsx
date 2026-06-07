@@ -1,48 +1,47 @@
 import React from "react";
 import { motion } from "motion/react";
-import { Gem, Gift, ShieldCheck, Globe, Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Gem, Gift, ShieldCheck, Truck, Sparkles } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 const features = [
   {
     icon: Gem,
-    title: "Premium Quality",
-    description: "18k gold plated & authentic stones",
+    title: "Material Details",
+    description: "Composition and care notes listed on product pages",
     color: "bg-brand-cream/40",
     iconColor: "text-brand-rosegold",
+    href: "/care-guide",
   },
   {
     icon: Gift,
-    title: "Luxury Packaging",
-    description: "Gift-ready velvet jewelry boxes",
+    title: "Gift-Ready Packing",
+    description: "Protective jewelry boxes with care guidance",
     color: "bg-brand-softpink/20",
     iconColor: "text-brand-hotpink",
+    href: "/shipping",
   },
   {
     icon: ShieldCheck,
     title: "Secure Checkout",
-    description: "100% encrypted safe payments",
+    description: "Encrypted checkout and clear support channels",
     color: "bg-brand-cream/40",
     iconColor: "text-brand-purple",
+    href: "/privacy",
   },
   {
-    icon: Globe,
-    title: "Worldwide Shipping",
-    description: "Fast express delivery globally",
+    icon: Truck,
+    title: "Tracked Dispatch",
+    description: "Shipping guidance and delivery help before ordering",
     color: "bg-brand-softpink/15",
     iconColor: "text-brand-lavender",
+    href: "/shipping",
   },
 ];
 
 export default function TrustSection() {
   return (
     <section className="relative py-32 px-6 overflow-hidden bg-white">
-      {/* Background Decorative Elements */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] rounded-full bg-brand-blush/20 blur-[120px]" />
-        <div className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] rounded-full bg-brand-rosegold/10 blur-[120px]" />
-      </div>
-
       <div className="max-w-7xl mx-auto relative z-10">
         <div className="text-center mb-20 space-y-4">
           <motion.div
@@ -72,13 +71,12 @@ export default function TrustSection() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.1 }}
-              whileHover={{ y: -10 }}
               className="group relative"
             >
-              <div className="h-full bg-white border border-black/5 rounded-2xl p-10 flex flex-col items-center text-center space-y-6 transition-all duration-500 hover:shadow-[0_20px_50px_rgba(0,0,0,0.05)] hover:border-brand-rosegold/20 group">
+              <Link to={feature.href} className="h-full bg-white border border-black/5 rounded-sm p-10 flex flex-col items-center text-center space-y-6 transition-all duration-500 hover:shadow-[0_20px_50px_rgba(0,0,0,0.05)] hover:border-brand-rosegold/20 group">
                 {/* Icon Container */}
                 <div className={cn(
-                  "relative w-20 h-20 rounded-2xl flex items-center justify-center transition-transform duration-500 group-hover:scale-110",
+                  "relative w-20 h-20 rounded-sm flex items-center justify-center transition-transform duration-500 group-hover:scale-105",
                   feature.color, "shadow-sm border border-brand-ink/5"
                 )}>
                   <feature.icon size={32} strokeWidth={1.2} className={cn("transition-colors duration-500", feature.iconColor)} />
@@ -111,10 +109,10 @@ export default function TrustSection() {
                 </div>
 
                 {/* Shimmer Effect */}
-                <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
+                <div className="absolute inset-0 rounded-sm overflow-hidden pointer-events-none">
                   <div className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/40 to-transparent" />
                 </div>
-              </div>
+              </Link>
             </motion.div>
           ))}
         </div>

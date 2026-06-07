@@ -1,6 +1,6 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Model, Schema } from "mongoose";
 
-export interface ITestimonial extends Document {
+export interface ITestimonial {
   author: string;
   rating: number;
   date: string;
@@ -27,4 +27,6 @@ const TestimonialSchema: Schema = new Schema(
   }
 );
 
-export default mongoose.models.Testimonial || mongoose.model<ITestimonial>("Testimonial", TestimonialSchema);
+const TestimonialModel = (mongoose.models.Testimonial as Model<ITestimonial> | undefined) || mongoose.model<ITestimonial>("Testimonial", TestimonialSchema);
+
+export default TestimonialModel;

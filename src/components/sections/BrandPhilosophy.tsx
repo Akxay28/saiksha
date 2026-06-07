@@ -1,5 +1,6 @@
 import React from "react";
 import { motion } from "motion/react";
+import { Link } from "react-router-dom";
 import { Sparkles, Heart, Star } from "lucide-react";
 
 export default function BrandPhilosophy() {
@@ -68,9 +69,9 @@ export default function BrandPhilosophy() {
             </div>
 
             <div className="pt-4">
-              <button className="text-[11px] uppercase tracking-[3px] font-bold text-brand-ink border-b border-brand-ink/20 pb-2 hover:border-brand-ink hover:text-brand-rosegold transition-all duration-300">
+              <Link to="/about" className="inline-flex text-[11px] uppercase tracking-[3px] font-bold text-brand-ink border-b border-brand-ink/20 pb-2 hover:border-brand-ink hover:text-brand-rosegold transition-all duration-300">
                 Discover Our Story
-              </button>
+              </Link>
             </div>
           </div>
         </div>

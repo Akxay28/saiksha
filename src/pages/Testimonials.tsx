@@ -31,6 +31,24 @@ export default function Testimonials() {
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const reviewPrompts = [
+    {
+      icon: Award,
+      title: "Product quality",
+      text: "Share how the finish, weight, comfort, clasp, and stones felt after wearing the piece.",
+    },
+    {
+      icon: ShieldCheck,
+      title: "Delivery experience",
+      text: "Mention packaging, tracking, dispatch time, and whether the piece arrived safely.",
+    },
+    {
+      icon: Heart,
+      title: "Occasion and styling",
+      text: "Tell future customers how you styled it for gifting, daily wear, weddings, or events.",
+    },
+  ];
+
   useEffect(() => {
     const fetchReviews = async () => {
       try {
@@ -199,6 +217,19 @@ export default function Testimonials() {
         </div>
       </section>
 
+      {/* Trust support */}
+      <section className="max-w-7xl mx-auto px-6 md:px-10 mb-16">
+        <div className="grid md:grid-cols-3 gap-6">
+          {reviewPrompts.map((item) => (
+            <div key={item.title} className="bg-white border border-neutral-100 rounded-2xl p-7 space-y-4 shadow-sm">
+              <item.icon className="text-brand-rosegold" size={26} strokeWidth={1.4} />
+              <h3 className="font-serif text-lg text-brand-ink">{item.title}</h3>
+              <p className="text-xs text-neutral-500 font-light leading-relaxed">{item.text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Filter and Reviews Grid */}
       <section className="max-w-7xl mx-auto px-6 md:px-10 space-y-8">
         
@@ -235,8 +266,20 @@ export default function Testimonials() {
         {filteredReviews.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-3xl border border-neutral-100 shadow-sm space-y-4">
             <MessageSquare size={40} className="mx-auto text-neutral-300" />
-            <h4 className="font-serif text-lg font-bold text-neutral-500">No matching reviews</h4>
-            <p className="text-neutral-400 text-xs font-light">Be the first to submit a review for this filter rating!</p>
+            <h4 className="font-serif text-lg font-bold text-neutral-500">
+              {isLoading ? "Loading customer reviews" : "No matching reviews yet"}
+            </h4>
+            <p className="text-neutral-400 text-xs font-light">
+              {isLoading ? "Please wait while we gather the latest testimonial entries." : "Be the first to submit a testimonial for this rating."}
+            </p>
+            {!isLoading && (
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="inline-flex bg-brand-ink text-white px-6 py-3 rounded-sm text-[10px] uppercase tracking-[2px] font-bold"
+              >
+                Add Your Testimonial
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">

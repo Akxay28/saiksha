@@ -1,11 +1,9 @@
 import React from "react";
 import { motion } from "motion/react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Star, ShoppingBag, Instagram, Phone, Mail, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useProducts } from "../context/ProductContext";
-import dbData from "../data/db.json";
 import ProductCard from "../components/ui/ProductCard";
-import { cn } from "../lib/utils";
 
 import TrustSection from "../components/sections/TrustSection";
 import BrandPhilosophy from "../components/sections/BrandPhilosophy";
@@ -169,51 +167,6 @@ export default function Home() {
       <TrustSection />
 
       <Testimonials />
-
-      {/* Social Proof Grid */}
-      <section className="bg-brand-cream/10 py-24">
-        <div className="max-w-7xl mx-auto px-6 md:px-10 space-y-12">
-          <div className="flex flex-col md:flex-row items-end justify-between gap-6">
-            <div className="space-y-4">
-              <span className="text-[10px] uppercase tracking-[4px] text-brand-rosegold font-bold block">Community</span>
-              <h2 className="text-4xl font-serif text-brand-ink">In the <span className="text-brand-gradient font-serif tracking-normal italic">Wild</span></h2>
-              <p className="text-neutral-400 font-light text-sm">Join our journey on Instagram for daily inspiration. <span className="text-brand-rosegold font-medium">@saiksha_jewelry</span></p>
-            </div>
-            <a href="https://instagram.com" target="_blank" rel="noreferrer" className="flex items-center space-x-2 text-[11px] uppercase tracking-[2px] font-bold text-brand-ink group">
-              <Instagram size={18} />
-              <span>Follow Along</span>
-            </a>
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {dbData.instagram_feed.map((item) => (
-              <a 
-                key={item.id} 
-                href={item.instagram_url} 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="aspect-square bg-brand-cream group relative overflow-hidden block rounded-sm shadow-sm hover:shadow-md transition-shadow duration-300"
-              >
-                <img 
-                  src={item.image_url}
-                  alt={`Social Post by ${item.username}`}
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-brand-ink/65 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center p-4 text-center">
-                  <Instagram size={24} className="text-white mb-2 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300" />
-                  <span className="text-white font-mono text-xs font-medium tracking-wider transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300 delay-75">
-                    {item.username}
-                  </span>
-                  <span className="text-white/60 text-[9px] uppercase tracking-[2px] mt-1 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300 delay-100">
-                    View Post
-                  </span>
-                </div>
-              </a>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* Final SEO Footer Copy */}
       <section className="py-16 text-center border-t border-black/5 bg-white">
