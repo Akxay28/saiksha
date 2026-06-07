@@ -1,0 +1,8 @@
+{
+  "name": "Saiksha",
+  "description": "A premium luxury jewelry e-commerce platform for modern women, featuring elegant earrings, necklaces, and fashion accessories.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

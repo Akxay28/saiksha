@@ -1,0 +1,28 @@
+{
+  "instagram_feed": [
+    {
+      "id": 1,
+      "username": "@aurora.lux",
+      "image_url": "https://images.unsplash.com/photo-1543294001-f7cd5d7fb516?auto=format&fit=crop&q=80&w=800",
+      "instagram_url": "https://instagram.com/sample1"
+    },
+    {
+      "id": 2,
+      "username": "@selene.gems",
+      "image_url": "https://images.unsplash.com/photo-1573408301185-9146fe634ad0?auto=format&fit=crop&q=80&w=800",
+      "instagram_url": "https://instagram.com/sample1"
+    },
+    {
+      "id": 3,
+      "username": "@stella_heirloom",
+      "image_url": "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&q=80&w=800",
+      "instagram_url": "https://instagram.com/sample1"
+    },
+    {
+      "id": 4,
+      "username": "@luna_maison",
+      "image_url": "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&q=80&w=800",
+      "instagram_url": "https://instagram.com/sample1"
+    }
+  ]
+}
