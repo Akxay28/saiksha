@@ -15,7 +15,7 @@ import {
 import { useProducts } from "../context/ProductContext";
 import { Product } from "../types";
 import { toast } from "sonner";
-import logoImg from "../assets/images/saiksha_logo_1780685763441.png";
+import logoImg from "../assets/images/saiksha-logo-mark.png";
 
 interface AdminDashboardProps {
   onClose: () => void;
@@ -310,12 +310,14 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
           <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-brand-rosegold via-[#ad854f] to-brand-rosegold" />
           
           <div className="text-center space-y-4 mb-8">
-            <img 
-              src={logoImg} 
-              alt="Saiksha Logo" 
-              className="h-14 w-14 object-contain mx-auto"
-              referrerPolicy="no-referrer"
-            />
+            <div className="h-16 w-16 rounded-full bg-white ring-1 ring-brand-rosegold/20 shadow-sm flex items-center justify-center mx-auto">
+              <img 
+                src={logoImg} 
+                alt="Saiksha Logo" 
+                className="h-14 w-14 rounded-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            </div>
             <h2 className="text-2xl font-serif font-bold tracking-wider text-neutral-900 uppercase">Saiksha Console</h2>
             <p className="text-xs text-neutral-400 font-light tracking-wide">Enter admin credentials to manage the Atlas catalog.</p>
           </div>
@@ -382,7 +384,9 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
           </button>
           <div className="h-6 w-px bg-neutral-200" />
           <div className="flex items-center space-x-2.5">
-            <img src={logoImg} alt="Saiksha Logo" className="h-8 w-8 object-contain" referrerPolicy="no-referrer" />
+            <div className="h-9 w-9 rounded-full bg-white ring-1 ring-brand-rosegold/20 shadow-sm flex items-center justify-center shrink-0">
+              <img src={logoImg} alt="Saiksha Logo" className="h-8 w-8 rounded-full object-cover" referrerPolicy="no-referrer" />
+            </div>
             <div>
               <span className="font-serif text-sm font-bold tracking-widest text-neutral-900 uppercase">SAIKSHA</span>
               <span className="text-[8px] bg-brand-rosegold/10 text-brand-rosegold font-bold uppercase px-2 py-0.5 rounded-full ml-2">Atlas Admin</span>
