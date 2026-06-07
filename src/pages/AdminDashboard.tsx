@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { 
   Plus, 
   Edit, 
@@ -23,7 +23,8 @@ interface AdminDashboardProps {
 
 export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const { products, addProduct, updateProduct, deleteProduct } = useProducts();
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem("saiksha_admin_token"));
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -60,6 +61,32 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  const showProductActionError = (status?: number, message?: string) => {
+    if (status === 401) {
+      setIsAuthenticated(false);
+      toast.error("Admin session expired. Please log in again.");
+      return;
+    }
+
+    toast.error(message || "Action failed. Please verify your database connection and try again.");
+  };
+
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const response = await fetch("/api/admin/session", { credentials: "include" });
+        setIsAuthenticated(response.ok);
+      } catch (error) {
+        console.error("Error checking admin session:", error);
+        setIsAuthenticated(false);
+      } finally {
+        setIsCheckingSession(false);
+      }
+    };
+
+    checkSession();
+  }, []);
+
   // Authentication
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,16 +98,18 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     try {
       const response = await fetch("/api/admin/login", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password })
       });
       const data = await response.json();
-      if (response.ok && data.success && data.token) {
-        setToken(data.token);
-        localStorage.setItem("saiksha_admin_token", data.token);
+      if (response.ok && data.success) {
+        setIsAuthenticated(true);
+        setUsername("");
+        setPassword("");
         toast.success("Successfully authenticated as Admin.");
       } else {
-        toast.error(data.error || "Authentication failed. Invalid credentials.");
+        toast.error(data.error || "Wrong admin username or password.");
       }
     } catch (err) {
       console.error(err);
@@ -90,9 +119,16 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     }
   };
 
-  const handleLogout = () => {
-    setToken(null);
-    localStorage.removeItem("saiksha_admin_token");
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/admin/logout", {
+        method: "POST",
+        credentials: "include"
+      });
+    } catch (error) {
+      console.error("Error logging out:", error);
+    }
+    setIsAuthenticated(false);
     toast.info("Logged out from admin panel.");
   };
 
@@ -178,7 +214,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) return;
+    if (!isAuthenticated) return;
 
     if (!formData.name || !formData.price || !formData.description || !formData.images[0]) {
       toast.error("Please fill in all required fields (Name, Price, Description, and at least first image URL).");
@@ -219,28 +255,36 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
 
     let success = false;
     if (editingProduct) {
-      success = await updateProduct(editingProduct.id, productPayload, token);
-      if (success) toast.success(`Product "${formData.name}" updated successfully.`);
+      const result = await updateProduct(editingProduct.id, productPayload);
+      success = result.success;
+      if (success) {
+        toast.success(`Product "${formData.name}" updated successfully.`);
+      } else {
+        showProductActionError(result.status, result.message);
+      }
     } else {
-      success = await addProduct(productPayload, token);
-      if (success) toast.success(`Product "${formData.name}" added successfully.`);
+      const result = await addProduct(productPayload);
+      success = result.success;
+      if (success) {
+        toast.success(`Product "${formData.name}" added successfully.`);
+      } else {
+        showProductActionError(result.status, result.message);
+      }
     }
 
     if (success) {
       setIsModalOpen(false);
-    } else {
-      toast.error("Action failed. Please verify your auth session or database link.");
     }
   };
 
   const handleDeleteProduct = async (id: string) => {
-    if (!token) return;
-    const success = await deleteProduct(id, token);
-    if (success) {
+    if (!isAuthenticated) return;
+    const result = await deleteProduct(id);
+    if (result.success) {
       toast.success("Product deleted successfully.");
       setDeleteConfirmId(null);
     } else {
-      toast.error("Failed to delete product.");
+      showProductActionError(result.status, result.message || "Failed to delete product.");
     }
   };
 
@@ -250,7 +294,15 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const uniqueCategories = Array.from(new Set(products.map((p) => p.category)));
 
   // Render Login overlay
-  if (!token) {
+  if (isCheckingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#fdfbf7] px-6 font-sans">
+        <div className="text-xs uppercase tracking-[3px] text-neutral-400 font-bold">Checking admin session...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#fdfbf7] px-6 font-sans">
         <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl border border-black/5 relative overflow-hidden">

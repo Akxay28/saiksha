@@ -14,6 +14,22 @@ dotenv.config();
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "swatipaul285@gmail.com";
+const ADMIN_COOKIE_NAME = "saiksha_admin_auth";
+const ADMIN_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 3;
+
+function parseCookies(cookieHeader?: string) {
+  return (cookieHeader || "").split(";").reduce<Record<string, string>>((cookies, cookie) => {
+    const [name, ...valueParts] = cookie.trim().split("=");
+    if (!name) return cookies;
+    cookies[name] = decodeURIComponent(valueParts.join("="));
+    return cookies;
+  }, {});
+}
+
+function buildAdminCookie(value: string, maxAgeSeconds: number) {
+  const secureFlag = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return `${ADMIN_COOKIE_NAME}=${encodeURIComponent(value)}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; SameSite=Lax${secureFlag}`;
+}
 
 // Connect to MongoDB Atlas
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -59,7 +75,8 @@ async function startServer() {
 
   // Admin Authentication Middleware
   const checkAdminAuth = (req: Request, res: Response, next: () => void) => {
-    const token = req.headers["x-admin-token"];
+    const cookies = parseCookies(req.headers.cookie);
+    const token = cookies[ADMIN_COOKIE_NAME];
     const expectedPassword = process.env.ADMIN_PASSWORD || "admin-saiksha";
     if (token === expectedPassword) {
       next();
@@ -75,10 +92,20 @@ async function startServer() {
     const expectedPassword = process.env.ADMIN_PASSWORD || "admin-saiksha";
 
     if (username === expectedUsername && password === expectedPassword) {
-      res.json({ success: true, token: expectedPassword });
+      res.setHeader("Set-Cookie", buildAdminCookie(expectedPassword, ADMIN_COOKIE_MAX_AGE_SECONDS));
+      res.json({ success: true });
     } else {
       res.status(401).json({ success: false, error: "Invalid credentials" });
     }
+  });
+
+  app.get("/api/admin/session", checkAdminAuth, (_req: Request, res: Response) => {
+    res.json({ success: true });
+  });
+
+  app.post("/api/admin/logout", (_req: Request, res: Response) => {
+    res.setHeader("Set-Cookie", buildAdminCookie("", 0));
+    res.json({ success: true });
   });
 
   // Create Product API Route

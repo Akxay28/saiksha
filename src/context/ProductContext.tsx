@@ -1,14 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Product } from "../types";
 
+export interface ProductActionResult {
+  success: boolean;
+  status?: number;
+  message?: string;
+}
+
 interface ProductContextType {
   products: Product[];
   loading: boolean;
   error: string | null;
   getProductById: (id: string) => Product | undefined;
-  addProduct: (productData: Omit<Product, "id">, token: string) => Promise<boolean>;
-  updateProduct: (id: string, productData: Partial<Product>, token: string) => Promise<boolean>;
-  deleteProduct: (id: string, token: string) => Promise<boolean>;
+  addProduct: (productData: Omit<Product, "id">) => Promise<ProductActionResult>;
+  updateProduct: (id: string, productData: Partial<Product>) => Promise<ProductActionResult>;
+  deleteProduct: (id: string) => Promise<ProductActionResult>;
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
@@ -46,66 +52,79 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     return products.find((p) => p.id === id);
   };
 
-  const addProduct = async (productData: Omit<Product, "id">, token: string) => {
+  const addProduct = async (productData: Omit<Product, "id">) => {
     try {
       const response = await fetch("/api/products", {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "x-admin-token": token,
         },
         body: JSON.stringify(productData),
       });
       if (!response.ok) {
-        throw new Error("Failed to add product on backend");
+        const errorData = await response.json().catch(() => ({}));
+        return {
+          success: false,
+          status: response.status,
+          message: errorData.error || "Failed to add product on backend"
+        };
       }
       const newProduct = await response.json();
       setProducts((prev) => [newProduct, ...prev]);
-      return true;
+      return { success: true };
     } catch (err) {
       console.error("Error adding product:", err);
-      return false;
+      return { success: false, message: "Could not connect to the product API." };
     }
   };
 
-  const updateProduct = async (id: string, productData: Partial<Product>, token: string) => {
+  const updateProduct = async (id: string, productData: Partial<Product>) => {
     try {
       const response = await fetch(`/api/products/${id}`, {
         method: "PUT",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "x-admin-token": token,
         },
         body: JSON.stringify(productData),
       });
       if (!response.ok) {
-        throw new Error("Failed to update product on backend");
+        const errorData = await response.json().catch(() => ({}));
+        return {
+          success: false,
+          status: response.status,
+          message: errorData.error || "Failed to update product on backend"
+        };
       }
       const updatedProduct = await response.json();
       setProducts((prev) => prev.map((p) => (p.id === id ? updatedProduct : p)));
-      return true;
+      return { success: true };
     } catch (err) {
       console.error("Error updating product:", err);
-      return false;
+      return { success: false, message: "Could not connect to the product API." };
     }
   };
 
-  const deleteProduct = async (id: string, token: string) => {
+  const deleteProduct = async (id: string) => {
     try {
       const response = await fetch(`/api/products/${id}`, {
         method: "DELETE",
-        headers: {
-          "x-admin-token": token,
-        },
+        credentials: "include",
       });
       if (!response.ok) {
-        throw new Error("Failed to delete product on backend");
+        const errorData = await response.json().catch(() => ({}));
+        return {
+          success: false,
+          status: response.status,
+          message: errorData.error || "Failed to delete product on backend"
+        };
       }
       setProducts((prev) => prev.filter((p) => p.id !== id));
-      return true;
+      return { success: true };
     } catch (err) {
       console.error("Error deleting product:", err);
-      return false;
+      return { success: false, message: "Could not connect to the product API." };
     }
   };
 

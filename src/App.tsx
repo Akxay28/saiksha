@@ -43,6 +43,12 @@ export default function App() {
   if (showAdmin) {
     return (
       <ProductProvider>
+        <Toaster position="bottom-right" richColors toastOptions={{
+          style: {
+            fontFamily: "var(--font-sans)",
+            borderRadius: "4px",
+          }
+        }} />
         <AdminDashboard onClose={() => setShowAdmin(false)} />
       </ProductProvider>
     );
