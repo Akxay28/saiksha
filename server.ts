@@ -16,6 +16,7 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "swatipaul285@gmail.com";
 const ADMIN_COOKIE_NAME = "saiksha_admin_auth";
 const ADMIN_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 3;
+const PUBLIC_ROUTES = ["/", "/collection", "/testimonials"];
 
 function parseCookies(cookieHeader?: string) {
   return (cookieHeader || "").split(";").reduce<Record<string, string>>((cookies, cookie) => {
@@ -29,6 +30,35 @@ function parseCookies(cookieHeader?: string) {
 function buildAdminCookie(value: string, maxAgeSeconds: number) {
   const secureFlag = process.env.NODE_ENV === "production" ? "; Secure" : "";
   return `${ADMIN_COOKIE_NAME}=${encodeURIComponent(value)}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; SameSite=Lax${secureFlag}`;
+}
+
+function getSiteOrigin(req: Request) {
+  const configuredUrl = process.env.APP_URL?.trim();
+  if (configuredUrl && configuredUrl !== "MY_APP_URL") {
+    return configuredUrl.replace(/\/+$/, "");
+  }
+
+  return `${req.protocol}://${req.get("host")}`.replace(/\/+$/, "");
+}
+
+function escapeXml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function sitemapEntry(location: string, options: { lastmod?: string; priority?: string; changefreq?: string } = {}) {
+  return [
+    "  <url>",
+    `    <loc>${escapeXml(location)}</loc>`,
+    options.lastmod ? `    <lastmod>${options.lastmod}</lastmod>` : "",
+    options.changefreq ? `    <changefreq>${options.changefreq}</changefreq>` : "",
+    options.priority ? `    <priority>${options.priority}</priority>` : "",
+    "  </url>",
+  ].filter(Boolean).join("\n");
 }
 
 // Connect to MongoDB Atlas
@@ -46,6 +76,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  app.set("trust proxy", true);
   app.use(express.json());
 
   // API Routes
@@ -321,6 +352,51 @@ async function startServer() {
       console.error("Error saving review to database:", dbErr);
       res.status(500).json({ error: "Failed to save experience review to database" });
     }
+  });
+
+  app.get("/robots.txt", (req: Request, res: Response) => {
+    const siteOrigin = getSiteOrigin(req);
+
+    res.type("text/plain").send([
+      "User-agent: *",
+      "Allow: /",
+      `Sitemap: ${siteOrigin}/sitemap.xml`,
+      "",
+    ].join("\n"));
+  });
+
+  app.get("/sitemap.xml", async (req: Request, res: Response) => {
+    const siteOrigin = getSiteOrigin(req);
+    const today = new Date().toISOString().slice(0, 10);
+
+    const entries = PUBLIC_ROUTES.map((route) => sitemapEntry(`${siteOrigin}${route}`, {
+      lastmod: today,
+      changefreq: route === "/" ? "weekly" : "monthly",
+      priority: route === "/" ? "1.0" : "0.8",
+    }));
+
+    try {
+      const products = await Product.find({}, { id: 1, updatedAt: 1 }).lean();
+      products.forEach((product: any) => {
+        if (!product.id) return;
+        const lastmod = product.updatedAt ? new Date(product.updatedAt).toISOString().slice(0, 10) : today;
+        entries.push(sitemapEntry(`${siteOrigin}/product/${encodeURIComponent(product.id)}`, {
+          lastmod,
+          changefreq: "weekly",
+          priority: "0.7",
+        }));
+      });
+    } catch (error) {
+      console.error("Error building sitemap product URLs:", error);
+    }
+
+    res.type("application/xml").send([
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+      ...entries,
+      "</urlset>",
+      "",
+    ].join("\n"));
   });
 
   // Vite middleware for development
