@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, ShieldCheck, Truck, Sparkles, ReceiptText } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useProducts } from "../context/ProductContext";
@@ -10,24 +10,18 @@ export default function Cart() {
   const { cart, addToCart, removeFromCart, updateQuantity, cartTotal } = useCart();
   const { products } = useProducts();
 
-  const shipping = cartTotal > 5000 ? 0 : 150;
+  const shipping: number = 0;
   const total = cartTotal + shipping;
   const cartIds = new Set(cart.map((item) => item.id));
   const recommendedProducts = products
     .filter((product) => !cartIds.has(product.id) && product.stock > 0)
     .slice(0, 4);
 
+  const navigate = useNavigate();
+
   const handleCheckout = () => {
     if (cart.length === 0) return;
-
-    const itemsText = cart
-      .map((item) => `${item.name} × ${item.quantity}`)
-      .join("\n");
-
-    const message = `Hello Saiksha, I would like to order the following jewelry products:\n\n${itemsText}\n\nTotal Amount: ₹${total.toLocaleString()}\n\nPlease assist me with the order.`;
-    
-    const encodedMessage = encodeURIComponent(message);
-    window.open(`https://wa.me/916351357299?text=${encodedMessage}`, "_blank");
+    navigate("/checkout");
   };
 
   if (cart.length === 0) {
@@ -211,15 +205,6 @@ export default function Cart() {
                 <span>Selection Subtotal</span>
                 <span className="text-brand-ink font-medium">₹{cartTotal.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-neutral-400 text-sm font-light">
-                <div className="flex items-center gap-2">
-                  <span>Shipping & Handling</span>
-                  {shipping === 0 && (
-                    <span className="text-[8px] bg-brand-rosegold/10 text-brand-rosegold px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Comp</span>
-                  )}
-                </div>
-                <span className="text-brand-ink font-medium">{shipping === 0 ? "Free" : `₹${shipping.toLocaleString()}`}</span>
-              </div>
               
               <div className="pt-6 border-t border-black/5 flex justify-between">
                 <div>
@@ -234,7 +219,7 @@ export default function Cart() {
               onClick={handleCheckout}
               className="w-full bg-brand-ink text-white py-5 px-8 text-[11px] uppercase tracking-[3px] font-bold hover:bg-neutral-800 transition-all shadow-2xl shadow-brand-ink/10 flex items-center justify-center space-x-4 group"
             >
-              <span>Secure Checkout via WhatsApp</span>
+              <span>Proceed to Secure Checkout</span>
               <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
             </button>
 

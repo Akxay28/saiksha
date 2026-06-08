@@ -30,17 +30,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addToCart = (product: Product, quantity: number = 1) => {
     const finalPrice = product.isSale && product.salePrice ? product.salePrice : product.price;
     const resolvedProduct = { ...product, price: finalPrice };
+    
+    const existingItem = cart.find((item) => item.id === resolvedProduct.id);
+    if (existingItem) {
+      toast.success(`Updated ${resolvedProduct.name} quantity`);
+    } else {
+      toast.success(`Added ${resolvedProduct.name} to bag`);
+    }
+
     setCart((prev) => {
-      const existingItem = prev.find((item) => item.id === resolvedProduct.id);
-      if (existingItem) {
-        toast.success(`Updated ${resolvedProduct.name} quantity`);
+      const exists = prev.some((item) => item.id === resolvedProduct.id);
+      if (exists) {
         return prev.map((item) =>
           item.id === resolvedProduct.id
             ? { ...item, quantity: item.quantity + quantity }
             : item
         );
       }
-      toast.success(`Added ${resolvedProduct.name} to bag`);
       return [...prev, { ...resolvedProduct, quantity }];
     });
   };

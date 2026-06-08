@@ -6,17 +6,28 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import Product from "./server/models/Product";
 import Testimonial from "./server/models/Testimonial";
+import Order from "./server/models/Order";
 import dns from "dns";
+import crypto from "crypto";
+
+import Razorpay from "razorpay";
 
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
 
 dotenv.config();
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const razorpay = process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
+  ? new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    })
+  : null;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "swatipaul285@gmail.com";
 const ADMIN_COOKIE_NAME = "saiksha_admin_auth";
 const ADMIN_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 3;
 const PUBLIC_ROUTES = ["/", "/collection", "/testimonials", "/about", "/care-guide", "/contact", "/faq", "/shipping", "/privacy"];
+const activeAdminSessions = new Set<string>();
 
 function parseCookies(cookieHeader?: string) {
   return (cookieHeader || "").split(";").reduce<Record<string, string>>((cookies, cookie) => {
@@ -108,8 +119,7 @@ async function startServer() {
   const checkAdminAuth = (req: Request, res: Response, next: () => void) => {
     const cookies = parseCookies(req.headers.cookie);
     const token = cookies[ADMIN_COOKIE_NAME];
-    const expectedPassword = process.env.ADMIN_PASSWORD || "admin-saiksha";
-    if (token === expectedPassword) {
+    if (token && activeAdminSessions.has(token)) {
       next();
     } else {
       res.status(401).json({ error: "Unauthorized access" });
@@ -123,7 +133,9 @@ async function startServer() {
     const expectedPassword = process.env.ADMIN_PASSWORD || "admin-saiksha";
 
     if (username === expectedUsername && password === expectedPassword) {
-      res.setHeader("Set-Cookie", buildAdminCookie(expectedPassword, ADMIN_COOKIE_MAX_AGE_SECONDS));
+      const sessionToken = crypto.randomBytes(32).toString("hex");
+      activeAdminSessions.add(sessionToken);
+      res.setHeader("Set-Cookie", buildAdminCookie(sessionToken, ADMIN_COOKIE_MAX_AGE_SECONDS));
       res.json({ success: true });
     } else {
       res.status(401).json({ success: false, error: "Invalid credentials" });
@@ -134,7 +146,12 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  app.post("/api/admin/logout", (_req: Request, res: Response) => {
+  app.post("/api/admin/logout", (req: Request, res: Response) => {
+    const cookies = parseCookies(req.headers.cookie);
+    const token = cookies[ADMIN_COOKIE_NAME];
+    if (token) {
+      activeAdminSessions.delete(token);
+    }
     res.setHeader("Set-Cookie", buildAdminCookie("", 0));
     res.json({ success: true });
   });
@@ -351,6 +368,409 @@ async function startServer() {
     } catch (dbErr) {
       console.error("Error saving review to database:", dbErr);
       res.status(500).json({ error: "Failed to save experience review to database" });
+    }
+  });
+
+  app.post("/api/checkout", async (req: Request, res: Response) => {
+    try {
+      const { customer, items, subTotal, discount, shipping, total, paymentMethod } = req.body;
+      if (!customer || !customer.firstName || !customer.lastName || !customer.email || !customer.phone || !customer.address || !customer.city || !customer.postalCode || !items || items.length === 0) {
+        return res.status(400).json({ error: "Missing required checkout details" });
+      }
+
+      // Generate random order ID
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000); // 4 digit random number
+      const orderId = `SAIKSHA-${randomSuffix}`;
+
+      // Save order to MongoDB Atlas
+      const newOrder = new Order({
+        orderId,
+        customer,
+        items,
+        subTotal,
+        discount: discount || 0,
+        shipping,
+        total,
+        paymentMethod,
+        status: "Pending"
+      });
+      await newOrder.save();
+
+      // Send silent email notification to admin using Resend
+      if (resend) {
+        try {
+          const itemsListHtml = items.map((item: any) => `
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #f0f0f0;">
+                <img src="${item.image}" alt="${item.name}" style="width: 40px; height: 50px; object-fit: cover; border-radius: 4px; vertical-align: middle; margin-right: 10px;" />
+                <span style="font-weight: bold; font-size: 13px;">${item.name}</span>
+              </td>
+              <td style="padding: 10px; border-bottom: 1px solid #f0f0f0; text-align: center; font-size: 13px;">${item.quantity}</td>
+              <td style="padding: 10px; border-bottom: 1px solid #f0f0f0; text-align: right; font-size: 13px; font-weight: bold;">₹${item.price.toLocaleString()}</td>
+            </tr>
+          `).join("");
+
+          const htmlContent = `
+            <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #faf9f6; padding: 30px; color: #1a1a1a;">
+              <div style="max-w: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e8e6e1; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+                <!-- Header -->
+                <div style="background-color: #0a0a0a; color: #ffffff; padding: 30px; text-align: center;">
+                  <h1 style="margin: 0; font-family: Georgia, serif; font-size: 26px; letter-spacing: 4px; font-weight: normal; color: #fdfbf7;">SAIKSHA JEWELRY</h1>
+                  <p style="margin: 5px 0 0 0; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #bda88e;">NEW ORDER RECEIVED</p>
+                </div>
+                
+                <!-- Body Content -->
+                <div style="padding: 30px;">
+                  <div style="border-bottom: 1px solid #f0f0f0; padding-bottom: 20px; margin-bottom: 25px;">
+                    <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888;">Order ID:</span>
+                    <strong style="font-size: 16px; color: #0a0a0a; display: block;">${orderId}</strong>
+                  </div>
+
+                  <!-- Customer Details -->
+                  <h3 style="font-family: Georgia, serif; border-bottom: 2px solid #bda88e; padding-bottom: 5px; margin-top: 0; font-weight: normal; color: #0a0a0a; font-size: 16px;">Customer Details</h3>
+                  <table style="width: 100%; font-size: 13px; border-collapse: collapse; margin-bottom: 25px;">
+                    <tr>
+                      <td style="padding: 6px 0; color: #666; width: 150px;">Name:</td>
+                      <td style="padding: 6px 0; font-weight: bold; color: #0a0a0a;">${customer.firstName} ${customer.lastName}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;">Email:</td>
+                      <td style="padding: 6px 0; color: #0a0a0a;">${customer.email}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;">Primary Phone:</td>
+                      <td style="padding: 6px 0; font-weight: bold; color: #0a0a0a;">${customer.phone}</td>
+                    </tr>
+                    ${customer.secondaryPhone ? `
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;">Secondary Phone:</td>
+                      <td style="padding: 6px 0; color: #0a0a0a;">${customer.secondaryPhone}</td>
+                    </tr>
+                    ` : ""}
+                    <tr>
+                      <td style="padding: 6px 0; color: #666; vertical-align: top;">Delivery Address:</td>
+                      <td style="padding: 6px 0; color: #0a0a0a; line-height: 1.4;">
+                        ${customer.address}<br />
+                        ${customer.city} - ${customer.postalCode}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;">Payment Method:</td>
+                      <td style="padding: 6px 0; font-weight: bold; color: #ad854f; text-transform: uppercase;">${paymentMethod}</td>
+                    </tr>
+                  </table>
+
+                  <!-- Order Items -->
+                  <h3 style="font-family: Georgia, serif; border-bottom: 2px solid #bda88e; padding-bottom: 5px; font-weight: normal; color: #0a0a0a; font-size: 16px; margin-top: 30px;">Selection Summary</h3>
+                  <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+                    <thead>
+                      <tr style="background-color: #faf9f6; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888;">
+                        <th style="padding: 10px; text-align: left;">Piece Details</th>
+                        <th style="padding: 10px; text-align: center;">Qty</th>
+                        <th style="padding: 10px; text-align: right;">Price</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${itemsListHtml}
+                    </tbody>
+                  </table>
+
+                  <!-- Totals -->
+                  <div style="background-color: #faf9f6; padding: 20px; border-radius: 6px; font-size: 13px; margin-top: 25px;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                      <tr>
+                        <td style="padding: 4px 0; color: #666;">Subtotal</td>
+                        <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #0a0a0a;">₹${subTotal.toLocaleString()}</td>
+                      </tr>
+                      ${discount && discount > 0 ? `
+                      <tr>
+                        <td style="padding: 4px 0; color: #666;">UPI Discount (10% Off)</td>
+                        <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #2e7d32;">-₹${discount.toLocaleString()}</td>
+                      </tr>
+                      ` : ""}
+                      <tr>
+                        <td style="padding: 4px 0; color: #666;">Shipping & Handling</td>
+                        <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #ad854f;">${shipping === 0 ? "FREE" : `₹${shipping.toLocaleString()}`}</td>
+                      </tr>
+                      <tr style="font-size: 16px; border-top: 1px dashed #ddd;">
+                        <td style="padding: 12px 0 0 0; font-family: Georgia, serif; font-weight: bold; color: #0a0a0a;">Order Total</td>
+                        <td style="padding: 12px 0 0 0; text-align: right; font-weight: bold; color: #0a0a0a;">₹${total.toLocaleString()}</td>
+                      </tr>
+                    </table>
+                  </div>
+                  
+                  <div style="margin-top: 30px; font-size: 11px; text-align: center; color: #999; border-top: 1px solid #f0f0f0; padding-top: 20px;">
+                    This is an automated notification from your Saiksha Online Console. Please update fulfillment status in your admin panel.
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+
+          await resend.emails.send({
+            from: "Saiksha Orders <onboarding@resend.dev>",
+            to: ADMIN_EMAIL,
+            subject: `[NEW ORDER] ${orderId} - ${customer.firstName} ${customer.lastName}`,
+            html: htmlContent,
+          });
+        } catch (emailErr) {
+          console.error("Error sending order email:", emailErr);
+        }
+      } else {
+        console.warn("RESEND_API_KEY is not set. Silent checkout email not sent.");
+      }
+
+      res.status(201).json({ success: true, orderId, order: newOrder });
+    } catch (error) {
+      console.error("Error saving checkout order:", error);
+      res.status(500).json({ error: "Failed to process checkout order" });
+    }
+  });
+
+  app.post("/api/create-order", async (req: Request, res: Response) => {
+    try {
+      const { amount, receipt } = req.body;
+      if (!razorpay) {
+        return res.status(500).json({ error: "Razorpay is not configured on this server" });
+      }
+      
+      const options = {
+        amount: Math.round(amount * 100), // amount in paisa
+        currency: "INR",
+        receipt: receipt || `rcpt_${Math.floor(Math.random() * 1000000)}`,
+      };
+
+      const order = await razorpay.orders.create(options);
+      res.json({ success: true, order, key_id: process.env.RAZORPAY_KEY_ID });
+    } catch (error: any) {
+      console.error("Error creating Razorpay order:", error);
+      res.status(500).json({ error: error.message || "Failed to create payment order" });
+    }
+  });
+
+  app.post("/api/verify-payment", async (req: Request, res: Response) => {
+    try {
+      const { 
+        razorpay_order_id, 
+        razorpay_payment_id, 
+        razorpay_signature,
+        customer,
+        items,
+        subTotal,
+        discount,
+        shipping,
+        total
+      } = req.body;
+
+      if (!process.env.RAZORPAY_KEY_SECRET) {
+        return res.status(500).json({ error: "Razorpay key secret is not configured" });
+      }
+
+      // Verify signature
+      const generated_signature = crypto
+        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .update(razorpay_order_id + "|" + razorpay_payment_id)
+        .digest("hex");
+
+      if (generated_signature !== razorpay_signature) {
+        return res.status(400).json({ error: "Payment verification failed. Invalid signature." });
+      }
+
+      // Generate random order ID
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+      const orderId = `SAIKSHA-${randomSuffix}`;
+
+      // Save order to MongoDB Atlas
+      const newOrder = new Order({
+        orderId,
+        customer,
+        items,
+        subTotal,
+        discount: discount || 0,
+        shipping,
+        total,
+        paymentMethod: "Direct UPI Transfer",
+        status: "Confirmed",
+        paymentStatus: "Paid",
+        razorpayOrderId: razorpay_order_id,
+        razorpayPaymentId: razorpay_payment_id,
+        razorpaySignature: razorpay_signature
+      });
+      await newOrder.save();
+
+      // Send confirmation email
+      if (resend) {
+        try {
+          const itemsListHtml = items.map((item: any) => `
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #f0f0f0;">
+                <img src="${item.image}" alt="${item.name}" style="width: 40px; height: 50px; object-fit: cover; border-radius: 4px; vertical-align: middle; margin-right: 10px;" />
+                <span style="font-weight: bold; font-size: 13px;">${item.name}</span>
+              </td>
+              <td style="padding: 10px; border-bottom: 1px solid #f0f0f0; text-align: center; font-size: 13px;">${item.quantity}</td>
+              <td style="padding: 10px; border-bottom: 1px solid #f0f0f0; text-align: right; font-size: 13px; font-weight: bold;">₹${item.price.toLocaleString()}</td>
+            </tr>
+          `).join("");
+
+          const htmlContent = `
+            <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #faf9f6; padding: 30px; color: #1a1a1a;">
+              <div style="max-w: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e8e6e1; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+                <!-- Header -->
+                <div style="background-color: #0a0a0a; color: #ffffff; padding: 30px; text-align: center;">
+                  <h1 style="margin: 0; font-family: Georgia, serif; font-size: 26px; letter-spacing: 4px; font-weight: normal; color: #fdfbf7;">SAIKSHA JEWELRY</h1>
+                  <p style="margin: 5px 0 0 0; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #bda88e;">ONLINE ORDER RECEIVED (PAID)</p>
+                </div>
+                
+                <!-- Body Content -->
+                <div style="padding: 30px;">
+                  <div style="border-bottom: 1px solid #f0f0f0; padding-bottom: 20px; margin-bottom: 25px;">
+                    <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888;">Order ID:</span>
+                    <strong style="font-size: 16px; color: #0a0a0a; display: block;">${orderId}</strong>
+                    <span style="font-size: 10px; color: #666; display: block; margin-top: 5px;">Payment Ref: ${razorpay_payment_id}</span>
+                  </div>
+
+                  <!-- Customer Details -->
+                  <h3 style="font-family: Georgia, serif; border-bottom: 2px solid #bda88e; padding-bottom: 5px; margin-top: 0; font-weight: normal; color: #0a0a0a; font-size: 16px;">Customer Details</h3>
+                  <table style="width: 100%; font-size: 13px; border-collapse: collapse; margin-bottom: 25px;">
+                    <tr>
+                      <td style="padding: 6px 0; color: #666; width: 150px;">Name:</td>
+                      <td style="padding: 6px 0; font-weight: bold; color: #0a0a0a;">${customer.firstName} ${customer.lastName}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;">Email:</td>
+                      <td style="padding: 6px 0; color: #0a0a0a;">${customer.email}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;">Primary Phone:</td>
+                      <td style="padding: 6px 0; font-weight: bold; color: #0a0a0a;">${customer.phone}</td>
+                    </tr>
+                    ${customer.secondaryPhone ? `
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;">Secondary Phone:</td>
+                      <td style="padding: 6px 0; color: #0a0a0a;">${customer.secondaryPhone}</td>
+                    </tr>
+                    ` : ""}
+                    <tr>
+                      <td style="padding: 6px 0; color: #666; vertical-align: top;">Delivery Address:</td>
+                      <td style="padding: 6px 0; color: #0a0a0a; line-height: 1.4;">
+                        ${customer.address}<br />
+                        ${customer.city} - ${customer.postalCode}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;">Payment Method:</td>
+                      <td style="padding: 6px 0; font-weight: bold; color: #2e7d32; text-transform: uppercase;">ONLINE (PAID)</td>
+                    </tr>
+                  </table>
+
+                  <!-- Order Items -->
+                  <h3 style="font-family: Georgia, serif; border-bottom: 2px solid #bda88e; padding-bottom: 5px; font-weight: normal; color: #0a0a0a; font-size: 16px; margin-top: 30px;">Selection Summary</h3>
+                  <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+                    <thead>
+                      <tr style="background-color: #faf9f6; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888;">
+                        <th style="padding: 10px; text-align: left;">Piece Details</th>
+                        <th style="padding: 10px; text-align: center;">Qty</th>
+                        <th style="padding: 10px; text-align: right;">Price</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${itemsListHtml}
+                    </tbody>
+                  </table>
+
+                  <!-- Totals -->
+                  <div style="background-color: #faf9f6; padding: 20px; border-radius: 6px; font-size: 13px; margin-top: 25px;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                      <tr>
+                        <td style="padding: 4px 0; color: #666;">Subtotal</td>
+                        <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #0a0a0a;">₹${subTotal.toLocaleString()}</td>
+                      </tr>
+                      ${discount && discount > 0 ? `
+                      <tr>
+                        <td style="padding: 4px 0; color: #666;">UPI Discount (10% Off)</td>
+                        <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #2e7d32;">-₹${discount.toLocaleString()}</td>
+                      </tr>
+                      ` : ""}
+                      <tr>
+                        <td style="padding: 4px 0; color: #666;">Shipping & Handling</td>
+                        <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #ad854f;">${shipping === 0 ? "FREE" : `₹${shipping.toLocaleString()}`}</td>
+                      </tr>
+                      <tr style="font-size: 16px; border-top: 1px dashed #ddd;">
+                        <td style="padding: 12px 0 0 0; font-family: Georgia, serif; font-weight: bold; color: #0a0a0a;">Order Total</td>
+                        <td style="padding: 12px 0 0 0; text-align: right; font-weight: bold; color: #0a0a0a;">₹${total.toLocaleString()}</td>
+                      </tr>
+                    </table>
+                  </div>
+                  
+                  <div style="margin-top: 30px; font-size: 11px; text-align: center; color: #999; border-top: 1px solid #f0f0f0; padding-top: 20px;">
+                    This is an automated notification from your Saiksha Online Console. Please update fulfillment status in your admin panel.
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+
+          await resend.emails.send({
+            from: "Saiksha Orders <onboarding@resend.dev>",
+            to: ADMIN_EMAIL,
+            subject: `[PAID ORDER] ${orderId} - ${customer.firstName} ${customer.lastName}`,
+            html: htmlContent,
+          });
+        } catch (emailErr) {
+          console.error("Error sending paid order email:", emailErr);
+        }
+      }
+
+      res.json({ success: true, orderId, order: newOrder });
+    } catch (error: any) {
+      console.error("Error verifying payment signature:", error);
+      res.status(500).json({ error: error.message || "Verification failed" });
+    }
+  });
+
+  // Admin order list API
+  app.get("/api/admin/orders", checkAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const orders = await Order.find({}).sort({ createdAt: -1 });
+      res.json(orders);
+    } catch (error) {
+      console.error("Error fetching orders for admin:", error);
+      res.status(500).json({ error: "Failed to fetch orders from database" });
+    }
+  });
+
+  // Admin update order status API
+  app.put("/api/admin/orders/:id/status", checkAdminAuth, async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    try {
+      const updatedOrder = await Order.findOneAndUpdate(
+        { orderId: id },
+        { status },
+        { returnDocument: "after" }
+      );
+      if (!updatedOrder) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      res.json(updatedOrder);
+    } catch (error) {
+      console.error(`Error updating order status for ${id}:`, error);
+      res.status(500).json({ error: "Failed to update order status" });
+    }
+  });
+
+  // Admin delete testimonial API
+  app.delete("/api/admin/testimonials/:id", checkAdminAuth, async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      const deletedTestimonial = await Testimonial.findByIdAndDelete(id);
+      if (!deletedTestimonial) {
+        return res.status(404).json({ error: "Testimonial not found" });
+      }
+      res.json({ success: true, message: "Testimonial deleted successfully" });
+    } catch (error) {
+      console.error(`Error deleting testimonial ${id}:`, error);
+      res.status(500).json({ error: "Failed to delete testimonial" });
     }
   });
 

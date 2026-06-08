@@ -10,12 +10,24 @@ import {
   TrendingUp, 
   AlertTriangle, 
   Database,
-  Eye
+  Eye,
+  ShoppingBag,
+  MessageSquare,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Mail,
+  Phone,
+  MapPin,
+  CreditCard,
+  Star,
+  CheckCircle2
 } from "lucide-react";
 import { useProducts } from "../context/ProductContext";
 import { Product } from "../types";
 import { toast } from "sonner";
 import logoImg from "../assets/images/saiksha-logo-mark.png";
+import { cn } from "../lib/utils";
 
 interface AdminDashboardProps {
   onClose: () => void;
@@ -29,7 +41,19 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const [password, setPassword] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // CRUD & Modal State
+  // Tab State
+  const [activeTab, setActiveTab] = useState<"products" | "orders" | "testimonials">("products");
+
+  // Orders State
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+
+  // Testimonials State
+  const [testimonials, setTestimonials] = useState<any[]>([]);
+  const [loadingTestimonials, setLoadingTestimonials] = useState(false);
+
+  // CRUD & Modal State for Products
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({
@@ -67,7 +91,6 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       toast.error("Admin session expired. Please log in again.");
       return;
     }
-
     toast.error(message || "Action failed. Please verify your database connection and try again.");
   };
 
@@ -86,6 +109,46 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
 
     checkSession();
   }, []);
+
+  // Fetch orders and testimonials on successful login
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchOrders();
+      fetchTestimonials();
+    }
+  }, [isAuthenticated]);
+
+  const fetchOrders = async () => {
+    setLoadingOrders(true);
+    try {
+      const response = await fetch("/api/admin/orders", { credentials: "include" });
+      if (response.ok) {
+        const data = await response.json();
+        setOrders(data);
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+      }
+    } catch (err) {
+      console.error("Error fetching orders:", err);
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
+  const fetchTestimonials = async () => {
+    setLoadingTestimonials(true);
+    try {
+      const response = await fetch("/api/testimonials");
+      if (response.ok) {
+        const data = await response.json();
+        setTestimonials(data);
+      }
+    } catch (err) {
+      console.error("Error fetching testimonials:", err);
+    } finally {
+      setLoadingTestimonials(false);
+    }
+  };
 
   // Authentication
   const handleLogin = async (e: React.FormEvent) => {
@@ -132,7 +195,55 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     toast.info("Logged out from admin panel.");
   };
 
-  // Form helpers
+  // Order Fulfillment Updates
+  const handleUpdateOrderStatus = async (orderId: string, status: string) => {
+    try {
+      const response = await fetch(`/api/admin/orders/${orderId}/status`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      if (response.ok) {
+        const updatedOrder = await response.json();
+        setOrders((prev) => prev.map((o) => (o.orderId === orderId ? updatedOrder : o)));
+        toast.success(`Order ${orderId} status updated to ${status}`);
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+        toast.error("Session expired. Please log in again.");
+      } else {
+        toast.error("Failed to update order status");
+      }
+    } catch (err) {
+      console.error("Error updating order status:", err);
+      toast.error("Could not update order status");
+    }
+  };
+
+  // Testimonial Deletion
+  const handleDeleteTestimonial = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this review permanently?")) return;
+    try {
+      const response = await fetch(`/api/admin/testimonials/${id}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+      if (response.ok) {
+        setTestimonials((prev) => prev.filter((t) => t._id !== id));
+        toast.success("Testimonial deleted successfully.");
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+        toast.error("Session expired. Please log in again.");
+      } else {
+        toast.error("Failed to delete testimonial.");
+      }
+    } catch (err) {
+      console.error("Error deleting testimonial:", err);
+      toast.error("Could not delete testimonial.");
+    }
+  };
+
+  // Product Form helpers
   const openAddModal = () => {
     setEditingProduct(null);
     setFormData({
@@ -290,10 +401,9 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
 
   // Stats calculation
   const totalProducts = products.length;
-  const lowStockCount = products.filter((p) => p.stock < 10).length;
-  const uniqueCategories = Array.from(new Set(products.map((p) => p.category)));
+  const pendingOrdersCount = orders.filter((o) => o.status === "Pending").length;
+  const totalReviewsCount = testimonials.length;
 
-  // Render Login overlay
   if (isCheckingSession) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#fdfbf7] px-6 font-sans">
@@ -302,11 +412,11 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     );
   }
 
+  // LOGIN SCREEN
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#fdfbf7] px-6 font-sans">
         <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl border border-black/5 relative overflow-hidden">
-          {/* Gold Accent Line */}
           <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-brand-rosegold via-[#ad854f] to-brand-rosegold" />
           
           <div className="text-center space-y-4 mb-8">
@@ -368,9 +478,10 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     );
   }
 
-  // Render Admin Dashboard
+  // DASHBOARD WORKSPACE
   return (
     <div className="min-h-screen bg-[#faf9f6] text-neutral-800 font-sans pb-20">
+      
       {/* Top Console Bar */}
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-neutral-100 py-4 px-6 md:px-12 flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -395,17 +506,19 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
         </div>
 
         <div className="flex items-center space-x-4">
-          <button
-            onClick={openAddModal}
-            className="bg-brand-ink text-white px-4 py-2.5 rounded-lg text-[9px] uppercase tracking-widest font-bold hover:bg-neutral-800 transition-all flex items-center space-x-1.5 shadow-md shadow-brand-ink/5"
-          >
-            <Plus size={13} />
-            <span>Add Jewelry</span>
-          </button>
+          {activeTab === "products" && (
+            <button
+              onClick={openAddModal}
+              className="bg-brand-ink text-white px-4 py-2.5 rounded-lg text-[9px] uppercase tracking-widest font-bold hover:bg-neutral-800 transition-all flex items-center space-x-1.5 shadow-md shadow-brand-ink/5 cursor-pointer"
+            >
+              <Plus size={13} />
+              <span>Add Jewelry</span>
+            </button>
+          )}
 
           <button
             onClick={handleLogout}
-            className="p-2 hover:bg-red-50 rounded-lg text-neutral-400 hover:text-red-500 transition-colors"
+            className="p-2 hover:bg-red-50 rounded-lg text-neutral-400 hover:text-red-500 transition-colors cursor-pointer"
             title="Logout Admin"
           >
             <LogOut size={16} />
@@ -418,6 +531,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
         
         {/* Stats Grid */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Total Catalog Stats Card */}
           <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[9px] uppercase tracking-widest text-neutral-400 font-bold">Total Collection</span>
@@ -428,122 +542,427 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
             </div>
           </div>
 
+          {/* Pending Orders Stats Card */}
           <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[9px] uppercase tracking-widest text-neutral-400 font-bold">Categories Active</span>
-              <h3 className="text-3xl font-serif font-bold text-neutral-900">{uniqueCategories.length} Types</h3>
+              <span className="text-[9px] uppercase tracking-widest text-neutral-400 font-bold">Pending Orders</span>
+              <h3 className="text-3xl font-serif font-bold text-neutral-900">{pendingOrdersCount} Requests</h3>
             </div>
             <div className="p-4 bg-brand-cream/20 rounded-2xl text-brand-rosegold">
-              <TrendingUp size={24} />
+              <ShoppingBag size={24} />
             </div>
           </div>
 
+          {/* Customer Reviews Stats Card */}
           <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[9px] uppercase tracking-widest text-neutral-400 font-bold">Low Stock Warning</span>
-              <h3 className={`text-3xl font-serif font-bold ${lowStockCount > 0 ? "text-amber-600" : "text-neutral-900"}`}>{lowStockCount} Items</h3>
+              <span className="text-[9px] uppercase tracking-widest text-neutral-400 font-bold">Total Testimonials</span>
+              <h3 className="text-3xl font-serif font-bold text-neutral-900">{totalReviewsCount} Reviews</h3>
             </div>
-            <div className={`p-4 rounded-2xl ${lowStockCount > 0 ? "bg-amber-50 text-amber-600 animate-pulse" : "bg-neutral-50 text-neutral-400"}`}>
-              <AlertTriangle size={24} />
+            <div className="p-4 bg-neutral-50 rounded-2xl text-neutral-500">
+              <MessageSquare size={24} />
             </div>
           </div>
         </section>
 
-        {/* Product Management Section */}
-        <section className="bg-white rounded-2xl border border-neutral-100 shadow-xs overflow-hidden">
-          <div className="p-6 border-b border-neutral-100 flex items-center justify-between">
-            <h4 className="font-serif text-lg font-bold text-neutral-900">Database Catalog Listing</h4>
-            <span className="text-[10px] text-neutral-400 tracking-wider font-mono">Collection Name: products</span>
-          </div>
+        {/* Tab Selection Panel */}
+        <div className="border-b border-neutral-200 flex space-x-8">
+          <button
+            onClick={() => setActiveTab("products")}
+            className={cn(
+              "pb-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 cursor-pointer",
+              activeTab === "products"
+                ? "border-brand-ink text-brand-ink font-extrabold"
+                : "border-transparent text-neutral-400 hover:text-neutral-700"
+            )}
+          >
+            Products ({totalProducts})
+          </button>
+          
+          <button
+            onClick={() => setActiveTab("orders")}
+            className={cn(
+              "pb-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 cursor-pointer",
+              activeTab === "orders"
+                ? "border-brand-ink text-brand-ink font-extrabold"
+                : "border-transparent text-neutral-400 hover:text-neutral-700"
+            )}
+          >
+            Orders ({orders.length})
+          </button>
 
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left">
-              <thead>
-                <tr className="bg-neutral-50/70 border-b border-neutral-100 text-[9px] uppercase tracking-widest text-neutral-400 font-bold">
-                  <th className="py-4 px-6">Image</th>
-                  <th className="py-4 px-6">Name & ID</th>
-                  <th className="py-4 px-6">Category</th>
-                  <th className="py-4 px-6">Price</th>
-                  <th className="py-4 px-6">Stock</th>
-                  <th className="py-4 px-6">Rating</th>
-                  <th className="py-4 px-6 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-50 text-xs">
-                {products.map((product) => (
-                  <tr key={product.id} className="hover:bg-neutral-50/30 transition-colors">
-                    <td className="py-4 px-6">
-                      <div className="w-10 h-12 rounded overflow-hidden bg-neutral-100 border border-neutral-100">
-                        <img 
-                          src={product.images[0]} 
-                          alt={product.name} 
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div>
-                        <span className="font-bold text-neutral-950 block">{product.name}</span>
-                        <span className="text-[10px] text-neutral-400 font-mono block">ID: {product.id}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <span className="px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-brand-cream/20 text-[#a2855b]">
-                        {product.category}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6 font-bold text-neutral-900">
-                      {product.isSale && product.salePrice ? (
-                        <div className="flex flex-col">
-                          <span className="text-[10px] text-neutral-400 line-through font-normal">₹{product.price.toLocaleString()}</span>
-                          <span className="text-brand-hotpink font-bold">₹{product.salePrice.toLocaleString()}</span>
-                        </div>
-                      ) : (
-                        <span>₹{product.price.toLocaleString()}</span>
-                      )}
-                    </td>
-                    <td className="py-4 px-6">
-                      {product.stock === 0 ? (
-                        <span className="font-extrabold text-red-650 bg-red-50 border border-red-100 px-2.5 py-1 rounded text-[9px] uppercase tracking-wider">
-                          Out of Stock
-                        </span>
-                      ) : (
-                        <span className={`font-bold ${product.stock < 10 ? "text-amber-600 font-extrabold" : "text-neutral-500"}`}>
-                          {product.stock} pcs
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-4 px-6 font-semibold text-neutral-500">
-                      ★ {product.rating} ({product.reviews})
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="flex items-center justify-end space-x-2">
-                        <button
-                          onClick={() => openEditModal(product)}
-                          className="p-2 text-neutral-400 hover:text-brand-rosegold hover:bg-neutral-50 rounded-lg transition-all"
-                          title="Edit Product"
-                        >
-                          <Edit size={14} />
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirmId(product.id)}
-                          className="p-2 text-neutral-400 hover:text-red-500 hover:bg-neutral-50 rounded-lg transition-all"
-                          title="Delete Product"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
+          <button
+            onClick={() => setActiveTab("testimonials")}
+            className={cn(
+              "pb-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 cursor-pointer",
+              activeTab === "testimonials"
+                ? "border-brand-ink text-brand-ink font-extrabold"
+                : "border-transparent text-neutral-400 hover:text-neutral-700"
+            )}
+          >
+            Testimonials ({totalReviewsCount})
+          </button>
+        </div>
+
+        {/* TAB VIEW 1: PRODUCTS CATALOG LIST */}
+        {activeTab === "products" && (
+          <section className="bg-white rounded-2xl border border-neutral-100 shadow-xs overflow-hidden">
+            <div className="p-6 border-b border-neutral-100 flex items-center justify-between bg-neutral-50/20">
+              <h4 className="font-serif text-base font-bold text-neutral-900">Database Catalog Listing</h4>
+              <span className="text-[9px] text-neutral-400 tracking-wider font-mono">Collection Name: products</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="bg-neutral-50/70 border-b border-neutral-100 text-[9px] uppercase tracking-widest text-neutral-400 font-bold">
+                    <th className="py-4 px-6">Image</th>
+                    <th className="py-4 px-6">Name & ID</th>
+                    <th className="py-4 px-6">Category</th>
+                    <th className="py-4 px-6">Price</th>
+                    <th className="py-4 px-6">Stock</th>
+                    <th className="py-4 px-6">Rating</th>
+                    <th className="py-4 px-6 text-right">Actions</th>
                   </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-50 text-xs">
+                  {products.map((product) => (
+                    <tr key={product.id} className="hover:bg-neutral-50/30 transition-colors">
+                      <td className="py-4 px-6">
+                        <div className="w-10 h-12 rounded overflow-hidden bg-neutral-100 border border-neutral-100">
+                          <img 
+                            src={product.images[0]} 
+                            alt={product.name} 
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      </td>
+                      <td className="py-4 px-6">
+                        <div>
+                          <span className="font-bold text-neutral-950 block">{product.name}</span>
+                          <span className="text-[10px] text-neutral-400 font-mono block">ID: {product.id}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6">
+                        <span className="px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-brand-cream/20 text-[#a2855b]">
+                          {product.category}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 font-bold text-neutral-900">
+                        {product.isSale && product.salePrice ? (
+                          <div className="flex flex-col">
+                            <span className="text-[10px] text-neutral-400 line-through font-normal">₹{product.price.toLocaleString()}</span>
+                            <span className="text-brand-hotpink font-bold">₹{product.salePrice.toLocaleString()}</span>
+                          </div>
+                        ) : (
+                          <span>₹{product.price.toLocaleString()}</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-6">
+                        {product.stock === 0 ? (
+                          <span className="font-extrabold text-red-650 bg-red-50 border border-red-100 px-2.5 py-1 rounded text-[9px] uppercase tracking-wider">
+                            Out of Stock
+                          </span>
+                        ) : (
+                          <span className={`font-bold ${product.stock < 10 ? "text-amber-600 font-extrabold" : "text-neutral-500"}`}>
+                            {product.stock} pcs
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-4 px-6 font-semibold text-neutral-500">
+                        ★ {product.rating} ({product.reviews})
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            onClick={() => openEditModal(product)}
+                            className="p-2 text-neutral-400 hover:text-brand-rosegold hover:bg-neutral-50 rounded-lg transition-all cursor-pointer"
+                            title="Edit Product"
+                          >
+                            <Edit size={14} />
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmId(product.id)}
+                            className="p-2 text-neutral-400 hover:text-red-500 hover:bg-neutral-50 rounded-lg transition-all cursor-pointer"
+                            title="Delete Product"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {/* TAB VIEW 2: ORDERS MANAGER */}
+        {activeTab === "orders" && (
+          <section className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">Fulfillment Center</h4>
+                <p className="text-[10px] text-neutral-450 mt-0.5">Manage customer purchases and update order statuses.</p>
+              </div>
+              <button 
+                onClick={fetchOrders}
+                className="text-[9px] uppercase font-bold tracking-widest text-[#a2855b] hover:text-[#7a603c]"
+              >
+                Refresh Data
+              </button>
+            </div>
+
+            {loadingOrders ? (
+              <div className="text-center py-12 text-xs text-neutral-400">Loading catalog orders...</div>
+            ) : orders.length === 0 ? (
+              <div className="text-center py-20 bg-white rounded-2xl border border-black/5 text-neutral-400 space-y-4">
+                <ShoppingBag size={40} className="mx-auto text-neutral-300" />
+                <h4 className="font-serif text-sm font-bold text-neutral-500">No Orders Placed Yet</h4>
+                <p className="text-[10px] text-neutral-400 font-light">Customer checkout submissions will register here.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {orders.map((order) => {
+                  const isExpanded = expandedOrderId === order.orderId;
+                  const dateString = order.createdAt 
+                    ? new Date(order.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                    : "N/A";
+                  
+                  return (
+                    <div 
+                      key={order.orderId}
+                      className="bg-white rounded-2xl border border-neutral-150 shadow-xs overflow-hidden transition-all duration-300"
+                    >
+                      {/* Accordion Trigger Header */}
+                      <div 
+                        onClick={() => setExpandedOrderId(isExpanded ? null : order.orderId)}
+                        className="p-5 md:p-6 flex flex-wrap items-center justify-between gap-4 cursor-pointer hover:bg-neutral-50/50"
+                      >
+                        <div className="flex items-center space-x-4 min-w-0 flex-1">
+                          <div className="w-10 h-10 rounded-full bg-brand-cream flex items-center justify-center shrink-0">
+                            <Clock size={16} className="text-brand-rosegold" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center space-x-2">
+                              <span className="font-mono font-bold text-xs text-neutral-900">{order.orderId}</span>
+                              <span className="text-[10px] text-neutral-400">• {dateString}</span>
+                            </div>
+                            <span className="text-xs text-neutral-550 truncate block mt-0.5">
+                              {order.customer.firstName} {order.customer.lastName} ({order.customer.city})
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-6">
+                          <div className="text-right">
+                            <span className="font-bold text-xs text-neutral-900 block">₹{order.total.toLocaleString()}</span>
+                            <span className="text-[9px] uppercase tracking-wider text-neutral-450 block mt-0.5">{order.items.length} {order.items.length === 1 ? "Piece" : "Pieces"}</span>
+                          </div>
+                          
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <select
+                              value={order.status}
+                              onChange={(e) => handleUpdateOrderStatus(order.orderId, e.target.value)}
+                              className={cn(
+                                "text-[9px] uppercase tracking-wider font-extrabold px-3 py-1.5 rounded-full outline-none cursor-pointer border",
+                                order.status === "Pending" && "bg-amber-50 text-amber-600 border-amber-200",
+                                order.status === "Confirmed" && "bg-blue-50 text-blue-600 border-blue-200",
+                                order.status === "Shipped" && "bg-indigo-50 text-indigo-600 border-indigo-200",
+                                order.status === "Delivered" && "bg-green-50 text-green-600 border-green-200",
+                                order.status === "Cancelled" && "bg-red-50 text-red-600 border-red-200"
+                              )}
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="Confirmed">Confirmed</option>
+                              <option value="Shipped">Shipped</option>
+                              <option value="Delivered">Delivered</option>
+                              <option value="Cancelled">Cancelled</option>
+                            </select>
+                          </div>
+
+                          <div className="text-neutral-400">
+                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Accordion Details Panel */}
+                      {isExpanded && (
+                        <div className="border-t border-neutral-100 bg-[#fbfbfa]/30 p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 text-xs">
+                          {/* Shipping / Customer column */}
+                          <div className="lg:col-span-5 space-y-4 border-b lg:border-b-0 lg:border-r border-neutral-100 pb-6 lg:pb-0 lg:pr-8">
+                            <div className="space-y-1">
+                              <span className="text-[9px] uppercase tracking-wider text-neutral-400 font-extrabold">Shipping Coordinates</span>
+                              <p className="font-bold text-neutral-900 text-sm">
+                                {order.customer.firstName} {order.customer.lastName}
+                              </p>
+                              <p className="text-neutral-500 font-light leading-relaxed">
+                                {order.customer.address},<br />
+                                {order.customer.city} - {order.customer.postalCode}
+                              </p>
+                            </div>
+
+                            <div className="space-y-2 pt-2">
+                              <span className="text-[9px] uppercase tracking-wider text-neutral-400 font-extrabold">Contact Details</span>
+                              <p className="text-neutral-700 flex items-center gap-2">
+                                <Mail size={13} className="text-neutral-400" /> {order.customer.email}
+                              </p>
+                              <p className="text-neutral-700 flex items-center gap-2">
+                                <Phone size={13} className="text-neutral-400" /> {order.customer.phone} 
+                                <span className="text-[8px] uppercase tracking-wider bg-brand-rosegold/10 text-brand-rosegold px-1.5 py-0.5 rounded font-bold">Primary</span>
+                              </p>
+                              {order.customer.secondaryPhone && (
+                                <p className="text-neutral-700 flex items-center gap-2">
+                                  <Phone size={13} className="text-neutral-400" /> {order.customer.secondaryPhone} 
+                                  <span className="text-[8px] uppercase tracking-wider bg-neutral-100 text-neutral-500 px-1.5 py-0.5 rounded font-bold">Secondary</span>
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="space-y-1 pt-2">
+                              <span className="text-[9px] uppercase tracking-wider text-neutral-400 font-extrabold">Payment Parameters</span>
+                              <p className="font-bold text-[#ad854f] uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+                                <CreditCard size={13} /> {order.paymentMethod}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Items Purchased column */}
+                          <div className="lg:col-span-7 space-y-4">
+                            <span className="text-[9px] uppercase tracking-wider text-neutral-400 font-extrabold">Jewelry Selection ({order.items.length})</span>
+                            <div className="space-y-3">
+                              {order.items.map((item: any) => (
+                                <div key={item.id + item.name} className="flex items-center space-x-4 bg-white p-3 rounded-xl border border-black/5 shadow-xxs">
+                                  <div className="w-10 h-12 rounded bg-neutral-100 overflow-hidden shrink-0 border border-neutral-100">
+                                    <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                                  </div>
+                                  <div className="flex-grow min-w-0">
+                                    <h5 className="font-bold text-neutral-800 text-xs truncate">{item.name}</h5>
+                                    <span className="text-[10px] text-neutral-400 font-mono mt-0.5 block">ID: {item.id} • Qty {item.quantity}</span>
+                                  </div>
+                                  <span className="font-bold text-neutral-900 text-xs shrink-0">₹{item.price.toLocaleString()}</span>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Order Totals card */}
+                            <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-100 space-y-2 mt-4">
+                              <div className="flex justify-between text-[11px] text-neutral-500">
+                                <span>Subtotal</span>
+                                <span className="font-bold">₹{order.subTotal.toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between text-[11px] text-neutral-500">
+                                <span>Shipping & Handling</span>
+                                <span className="font-bold text-brand-rosegold">{order.shipping === 0 ? "FREE" : `₹${order.shipping.toLocaleString()}`}</span>
+                              </div>
+                              <div className="flex justify-between text-xs font-bold border-t border-neutral-200/60 pt-2 text-neutral-900">
+                                <span>Grand Total</span>
+                                <span>₹{order.total.toLocaleString()}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* TAB VIEW 3: TESTIMONIALS MODERATOR */}
+        {activeTab === "testimonials" && (
+          <section className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">Review Moderator</h4>
+                <p className="text-[10px] text-neutral-450 mt-0.5">Approve, verify, or remove customer experiences from the public storefront.</p>
+              </div>
+              <button 
+                onClick={fetchTestimonials}
+                className="text-[9px] uppercase font-bold tracking-widest text-[#a2855b] hover:text-[#7a603c]"
+              >
+                Refresh Data
+              </button>
+            </div>
+
+            {loadingTestimonials ? (
+              <div className="text-center py-12 text-xs text-neutral-400">Loading database testimonials...</div>
+            ) : testimonials.length === 0 ? (
+              <div className="text-center py-20 bg-white rounded-2xl border border-black/5 text-neutral-400 space-y-4">
+                <MessageSquare size={40} className="mx-auto text-neutral-300" />
+                <h4 className="font-serif text-sm font-bold text-neutral-500">No Testimonials Received</h4>
+                <p className="text-[10px] text-neutral-400 font-light">Client submissions will list here to approve/remove.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {testimonials.map((testimonial) => (
+                  <div 
+                    key={testimonial._id}
+                    className="bg-white border border-neutral-100 p-6 rounded-2xl shadow-xs relative flex flex-col justify-between"
+                  >
+                    <div className="space-y-4">
+                      {/* Rating & Date */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex text-yellow-400 gap-0.5">
+                          {[...Array(5)].map((_, i) => (
+                            <Star 
+                              key={i} 
+                              size={12} 
+                              className={i < testimonial.rating ? "fill-current text-yellow-400" : "text-neutral-200"} 
+                            />
+                          ))}
+                        </div>
+                        <span className="text-[10px] text-neutral-400 font-mono">{testimonial.date}</span>
+                      </div>
+
+                      {/* Review details */}
+                      <div className="space-y-1.5">
+                        <h4 className="font-serif text-xs font-bold text-neutral-900">{testimonial.title}</h4>
+                        <p className="text-[11px] text-neutral-500 font-light leading-relaxed">
+                          {testimonial.comment}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-6 mt-6 border-t border-neutral-50">
+                      <div className="flex items-center space-x-2.5">
+                        <div className="w-7 h-7 bg-brand-rosegold/10 text-brand-rosegold rounded-full flex items-center justify-center font-bold text-[10px] uppercase">
+                          {testimonial.author[0]}
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-neutral-800 block">
+                            {testimonial.author}
+                          </span>
+                          {testimonial.verified && (
+                            <span className="text-[7px] text-green-600 font-bold uppercase tracking-wider flex items-center gap-0.5 mt-0.5">
+                              <CheckCircle2 size={8} className="fill-green-100" /> Verified Purchase
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleDeleteTestimonial(testimonial._id)}
+                        className="text-neutral-400 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                        title="Delete Review"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              </div>
+            )}
+          </section>
+        )}
       </main>
 
-      {/* Edit / Add Modal Form */}
+      {/* Add / Edit Product Modal Form */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-neutral-950/40 backdrop-blur-xs" onClick={() => setIsModalOpen(false)} />
@@ -557,7 +976,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                 </h3>
                 <p className="text-[10px] text-neutral-400 mt-0.5">Fill in the specifications to save to MongoDB Atlas.</p>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-neutral-100 rounded-full text-neutral-400 hover:text-neutral-800 transition-all">
+              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-neutral-100 rounded-full text-neutral-400 hover:text-neutral-800 transition-all cursor-pointer">
                 <X size={18} />
               </button>
             </div>
@@ -662,7 +1081,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
               {/* SECTION: Image Assets */}
               <div className="space-y-4">
                 <h5 className="text-[10px] uppercase tracking-widest font-bold text-brand-rosegold pb-1.5 border-b border-neutral-100">2. Gallery Images</h5>
-                <p className="text-[10px] text-neutral-400 -mt-2">Provide up to 4 high-resolution image URLs. The first image will be the primary item cover.</p>
+                <p className="text-[10px] text-neutral-450 -mt-2">Provide up to 4 high-resolution image URLs. The first image will be the primary item cover.</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {formData.images.map((imgUrl, index) => (
                     <div key={index} className="space-y-1">
