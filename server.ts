@@ -9,6 +9,7 @@ import Testimonial from "./server/models/Testimonial";
 import Order from "./server/models/Order";
 import Analytics from "./server/models/Analytics";
 import AbandonedCart from "./server/models/AbandonedCart";
+import LiveVisitor from "./server/models/LiveVisitor";
 import dns from "dns";
 import crypto from "crypto";
 
@@ -87,15 +88,34 @@ if (MONGODB_URI) {
 
 // ── Live Visitor Tracking (SSE, in-memory) ──────────────────────────────────
 const sseClients = new Set<Response>();
-let liveVisitorCount = 0;
 let cachedTotalVisitors = 0;
 let cachedTotalVisits = 0;
 
-function broadcastVisitorCount() {
-  const payload = `data: ${JSON.stringify({
-    count: liveVisitorCount,
+async function getActiveVisitorCount() {
+  const activeSince = new Date(Date.now() - 25000);
+  return LiveVisitor.countDocuments({
+    source: "storefront",
+    lastSeen: { $gte: activeSince }
+  });
+}
+
+async function buildLiveStatsPayload() {
+  const analytics = await getSiteAnalytics();
+  cachedTotalVisitors = analytics.totalVisitors || 0;
+  cachedTotalVisits = analytics.totalVisits || 0;
+  return {
+    count: await getActiveVisitorCount(),
     totalVisitors: cachedTotalVisitors,
     totalVisits: cachedTotalVisits
+  };
+}
+
+async function broadcastVisitorCount() {
+  const stats = await buildLiveStatsPayload();
+  const payload = `data: ${JSON.stringify({
+    count: stats.count,
+    totalVisitors: stats.totalVisitors,
+    totalVisits: stats.totalVisits
   })}\n\n`;
   sseClients.forEach((client) => {
     try { client.write(payload); } catch (_) { /* client gone */ }
@@ -127,6 +147,21 @@ async function recordSiteVisit(visitorId?: string, shouldCountVisit = false) {
   cachedTotalVisitors = analytics.totalVisitors || 0;
   cachedTotalVisits = analytics.totalVisits || 0;
   return analytics;
+}
+
+async function recordLiveHeartbeat(activeId: string, source: "storefront" | "admin" = "storefront") {
+  const normalizedVisitorId = activeId.trim().slice(0, 128);
+  if (!normalizedVisitorId) return;
+
+  await LiveVisitor.findOneAndUpdate(
+    { visitorId: normalizedVisitorId },
+    {
+      visitorId: normalizedVisitorId,
+      source,
+      lastSeen: new Date()
+    },
+    { new: true, upsert: true }
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -169,7 +204,7 @@ async function startServer() {
       cachedTotalVisitors = analytics.totalVisitors || 0;
       cachedTotalVisits = analytics.totalVisits || 0;
       res.json({
-        activeVisitors: liveVisitorCount,
+        activeVisitors: await getActiveVisitorCount(),
         totalVisitors: cachedTotalVisitors,
         totalVisits: cachedTotalVisits
       });
@@ -207,10 +242,14 @@ async function startServer() {
     const isAdminWatcher = req.query.source === "admin";
     const shouldCountVisit = req.query.visit === "1" && !isAdminWatcher;
     const visitorId = typeof req.query.visitorId === "string" ? req.query.visitorId : undefined;
+    const activeId = typeof req.query.activeId === "string" ? req.query.activeId : visitorId;
 
     try {
       if (shouldCountVisit || visitorId) {
         await recordSiteVisit(visitorId, shouldCountVisit);
+        if (!isAdminWatcher && activeId) {
+          await recordLiveHeartbeat(activeId);
+        }
       } else {
         const analytics = await getSiteAnalytics();
         cachedTotalVisitors = analytics.totalVisitors || 0;
@@ -221,10 +260,7 @@ async function startServer() {
     }
 
     sseClients.add(res);
-    if (!isAdminWatcher) {
-      liveVisitorCount++;
-    }
-    broadcastVisitorCount();
+    await broadcastVisitorCount();
 
     // Keep-alive ping every 25s
     const keepAlive = setInterval(() => {
@@ -233,11 +269,8 @@ async function startServer() {
 
     req.on("close", () => {
       sseClients.delete(res);
-      if (!isAdminWatcher) {
-        liveVisitorCount = Math.max(0, liveVisitorCount - 1);
-      }
       clearInterval(keepAlive);
-      broadcastVisitorCount();
+      broadcastVisitorCount().catch((error) => console.error("Error broadcasting live visitor count:", error));
     });
   });
   // ─────────────────────────────────────────────────────────────────────────
@@ -360,6 +393,52 @@ async function startServer() {
     }
 
     res.json({ success: true });
+  });
+
+  app.post("/api/live/heartbeat", async (req: Request, res: Response) => {
+    try {
+      const { visitorId, activeId, source = "storefront", visit = false } = req.body || {};
+      const normalizedSource = source === "admin" ? "admin" : "storefront";
+
+      if (normalizedSource === "storefront" && typeof visitorId === "string") {
+        await recordLiveHeartbeat(typeof activeId === "string" ? activeId : visitorId, normalizedSource);
+        await recordSiteVisit(visitorId, !!visit);
+      } else {
+        const analytics = await getSiteAnalytics();
+        cachedTotalVisitors = analytics.totalVisitors || 0;
+        cachedTotalVisits = analytics.totalVisits || 0;
+      }
+
+      const stats = await buildLiveStatsPayload();
+      await broadcastVisitorCount();
+      res.json({
+        activeVisitors: stats.count,
+        totalVisitors: stats.totalVisitors,
+        totalVisits: stats.totalVisits
+      });
+    } catch (error) {
+      console.error("Error recording live heartbeat:", error);
+      res.status(500).json({ error: "Failed to record live heartbeat" });
+    }
+  });
+
+  app.post("/api/live/inactive", async (req: Request, res: Response) => {
+    try {
+      const { activeId } = req.body || {};
+      if (typeof activeId === "string" && activeId.trim()) {
+        await LiveVisitor.deleteOne({ visitorId: activeId.trim().slice(0, 128) });
+      }
+      const stats = await buildLiveStatsPayload();
+      await broadcastVisitorCount();
+      res.json({
+        activeVisitors: stats.count,
+        totalVisitors: stats.totalVisitors,
+        totalVisits: stats.totalVisits
+      });
+    } catch (error) {
+      console.error("Error marking live visitor inactive:", error);
+      res.status(500).json({ error: "Failed to mark visitor inactive" });
+    }
   });
 
   app.post("/api/abandoned-carts", async (req: Request, res: Response) => {
