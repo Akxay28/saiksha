@@ -249,6 +249,53 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     }
   };
 
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!window.confirm(`Delete order ${orderId} permanently?`)) return;
+    try {
+      const response = await fetch(`/api/admin/orders/${orderId}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+      if (response.ok) {
+        setOrders((prev) => prev.filter((order) => order.orderId !== orderId));
+        if (expandedOrderId === orderId) setExpandedOrderId(null);
+        toast.success(`Order ${orderId} deleted.`);
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+        toast.error("Session expired. Please log in again.");
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Failed to delete order.");
+      }
+    } catch (err) {
+      console.error("Error deleting order:", err);
+      toast.error("Could not delete order.");
+    }
+  };
+
+  const handleDeleteCartLead = async (id: string) => {
+    if (!window.confirm("Delete this cart lead permanently?")) return;
+    try {
+      const response = await fetch(`/api/admin/abandoned-carts/${id}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+      if (response.ok) {
+        setCartLeads((prev) => prev.filter((lead) => lead._id !== id));
+        toast.success("Cart lead deleted.");
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+        toast.error("Session expired. Please log in again.");
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Failed to delete cart lead.");
+      }
+    } catch (err) {
+      console.error("Error deleting cart lead:", err);
+      toast.error("Could not delete cart lead.");
+    }
+  };
+
   // Testimonial Deletion
   const handleDeleteTestimonial = async (id: string) => {
     if (!window.confirm("Are you sure you want to delete this review permanently?")) return;
@@ -890,6 +937,17 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                               </select>
                             </div>
 
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteOrder(order.orderId);
+                              }}
+                              className="p-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors cursor-pointer"
+                              title="Delete Order"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+
                             <div className="text-neutral-400">
                               {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             </div>
@@ -1077,9 +1135,18 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                             </p>
                           </div>
                         </div>
-                        <span className="rounded-full bg-amber-50 px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-700 border border-amber-100">
-                          {lead.status || "Open"}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-amber-50 px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-700 border border-amber-100">
+                            {lead.status || "Open"}
+                          </span>
+                          <button
+                            onClick={() => handleDeleteCartLead(lead._id)}
+                            className="p-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors cursor-pointer"
+                            title="Delete Cart Lead"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
 
                       <div className="space-y-3">

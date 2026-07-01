@@ -128,6 +128,7 @@ async function recordSiteVisit(visitorId?: string, shouldCountVisit = false) {
   cachedTotalVisits = analytics.totalVisits || 0;
   return analytics;
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function startServer() {
@@ -960,6 +961,34 @@ async function startServer() {
     } catch (error) {
       console.error("Error fetching abandoned carts for admin:", error);
       res.status(500).json({ error: "Failed to fetch cart leads" });
+    }
+  });
+
+  app.delete("/api/admin/orders/:id", checkAdminAuth, async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      const deletedOrder = await Order.findOneAndDelete({ orderId: id });
+      if (!deletedOrder) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error(`Error deleting order ${id}:`, error);
+      res.status(500).json({ error: "Failed to delete order" });
+    }
+  });
+
+  app.delete("/api/admin/abandoned-carts/:id", checkAdminAuth, async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      const deletedCart = await AbandonedCart.findByIdAndDelete(id);
+      if (!deletedCart) {
+        return res.status(404).json({ error: "Cart lead not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error(`Error deleting cart lead ${id}:`, error);
+      res.status(500).json({ error: "Failed to delete cart lead" });
     }
   });
 
