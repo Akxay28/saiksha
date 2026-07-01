@@ -7,6 +7,8 @@ import mongoose from "mongoose";
 import Product from "./server/models/Product";
 import Testimonial from "./server/models/Testimonial";
 import Order from "./server/models/Order";
+import Analytics from "./server/models/Analytics";
+import AbandonedCart from "./server/models/AbandonedCart";
 import dns from "dns";
 import crypto from "crypto";
 
@@ -83,6 +85,51 @@ if (MONGODB_URI) {
   console.warn("WARNING: MONGODB_URI is not set in environment variables. Running with DB features disabled.");
 }
 
+// ── Live Visitor Tracking (SSE, in-memory) ──────────────────────────────────
+const sseClients = new Set<Response>();
+let liveVisitorCount = 0;
+let cachedTotalVisitors = 0;
+let cachedTotalVisits = 0;
+
+function broadcastVisitorCount() {
+  const payload = `data: ${JSON.stringify({
+    count: liveVisitorCount,
+    totalVisitors: cachedTotalVisitors,
+    totalVisits: cachedTotalVisits
+  })}\n\n`;
+  sseClients.forEach((client) => {
+    try { client.write(payload); } catch (_) { /* client gone */ }
+  });
+}
+
+async function getSiteAnalytics() {
+  return Analytics.findOneAndUpdate(
+    { key: "site" },
+    { $setOnInsert: { totalVisits: 0, totalVisitors: 0, visitorIds: [] } },
+    { new: true, upsert: true }
+  );
+}
+
+async function recordSiteVisit(visitorId?: string, shouldCountVisit = false) {
+  const normalizedVisitorId = visitorId?.trim().slice(0, 128);
+  const analytics = await getSiteAnalytics();
+
+  if (shouldCountVisit) {
+    analytics.totalVisits = (analytics.totalVisits || 0) + 1;
+  }
+
+  if (normalizedVisitorId && !analytics.visitorIds.includes(normalizedVisitorId)) {
+    analytics.visitorIds.push(normalizedVisitorId);
+    analytics.totalVisitors = (analytics.totalVisitors || 0) + 1;
+  }
+
+  await analytics.save();
+  cachedTotalVisitors = analytics.totalVisitors || 0;
+  cachedTotalVisits = analytics.totalVisits || 0;
+  return analytics;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -115,7 +162,85 @@ async function startServer() {
     }
   });
 
-  // Admin Authentication Middleware
+  app.get("/api/analytics/site", async (req: Request, res: Response) => {
+    try {
+      const analytics = await getSiteAnalytics();
+      cachedTotalVisitors = analytics.totalVisitors || 0;
+      cachedTotalVisits = analytics.totalVisits || 0;
+      res.json({
+        activeVisitors: liveVisitorCount,
+        totalVisitors: cachedTotalVisitors,
+        totalVisits: cachedTotalVisits
+      });
+    } catch (error) {
+      console.error("Error fetching site analytics:", error);
+      res.status(500).json({ error: "Failed to fetch site analytics" });
+    }
+  });
+
+  // ── Product View Counter ──────────────────────────────────────────────────
+  app.post("/api/products/:id/view", async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      const product = await Product.findOneAndUpdate(
+        { id },
+        { $inc: { views: 1 } },
+        { new: true }
+      );
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      res.json({ views: product.views ?? 1 });
+    } catch (error) {
+      console.error(`Error incrementing view for product ${id}:`, error);
+      res.status(500).json({ error: "Failed to update view count" });
+    }
+  });
+
+  // ── SSE: Live Visitor Count ───────────────────────────────────────────────
+  app.get("/api/live/visitors", async (req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no"); // disable nginx buffering if proxied
+    res.flushHeaders();
+
+    const isAdminWatcher = req.query.source === "admin";
+    const shouldCountVisit = req.query.visit === "1" && !isAdminWatcher;
+    const visitorId = typeof req.query.visitorId === "string" ? req.query.visitorId : undefined;
+
+    try {
+      if (shouldCountVisit || visitorId) {
+        await recordSiteVisit(visitorId, shouldCountVisit);
+      } else {
+        const analytics = await getSiteAnalytics();
+        cachedTotalVisitors = analytics.totalVisitors || 0;
+        cachedTotalVisits = analytics.totalVisits || 0;
+      }
+    } catch (error) {
+      console.error("Error recording live visitor analytics:", error);
+    }
+
+    sseClients.add(res);
+    if (!isAdminWatcher) {
+      liveVisitorCount++;
+    }
+    broadcastVisitorCount();
+
+    // Keep-alive ping every 25s
+    const keepAlive = setInterval(() => {
+      try { res.write(": ping\n\n"); } catch (_) { clearInterval(keepAlive); }
+    }, 25000);
+
+    req.on("close", () => {
+      sseClients.delete(res);
+      if (!isAdminWatcher) {
+        liveVisitorCount = Math.max(0, liveVisitorCount - 1);
+      }
+      clearInterval(keepAlive);
+      broadcastVisitorCount();
+    });
+  });
+  // ─────────────────────────────────────────────────────────────────────────
+
   const checkAdminAuth = (req: Request, res: Response, next: () => void) => {
     const cookies = parseCookies(req.headers.cookie);
     const token = cookies[ADMIN_COOKIE_NAME];
@@ -234,6 +359,75 @@ async function startServer() {
     }
 
     res.json({ success: true });
+  });
+
+  app.post("/api/abandoned-carts", async (req: Request, res: Response) => {
+    try {
+      const { sessionId, customer, items, total } = req.body;
+      if (!sessionId || !customer?.name || !customer?.email || !customer?.phone || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: "Missing cart lead details" });
+      }
+
+      const savedCart = await AbandonedCart.findOneAndUpdate(
+        { sessionId },
+        {
+          sessionId,
+          customer: {
+            name: String(customer.name).trim(),
+            email: String(customer.email).trim(),
+            phone: String(customer.phone).trim()
+          },
+          items,
+          total: Number(total) || 0,
+          status: "Open"
+        },
+        { new: true, upsert: true }
+      );
+
+      if (resend) {
+        try {
+          const itemRows = items.map((item: any) => `
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">${item.name}</td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: center;">${item.quantity}</td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: right;">₹${Number(item.price || 0).toLocaleString()}</td>
+            </tr>
+          `).join("");
+
+          await resend.emails.send({
+            from: "Saiksha Cart Lead <onboarding@resend.dev>",
+            to: ADMIN_EMAIL,
+            subject: `[CART LEAD] ${customer.name} saved a bag`,
+            html: `
+              <div style="font-family: Arial, sans-serif; color: #222; max-width: 620px; margin: 0 auto;">
+                <h2 style="font-family: Georgia, serif; color: #0a0a0a;">New Saved Bag Lead</h2>
+                <p><strong>Name:</strong> ${customer.name}</p>
+                <p><strong>Email:</strong> ${customer.email}</p>
+                <p><strong>Phone:</strong> ${customer.phone}</p>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 13px;">
+                  <thead>
+                    <tr>
+                      <th style="text-align: left; padding-bottom: 8px;">Product</th>
+                      <th style="text-align: center; padding-bottom: 8px;">Qty</th>
+                      <th style="text-align: right; padding-bottom: 8px;">Price</th>
+                    </tr>
+                  </thead>
+                  <tbody>${itemRows}</tbody>
+                </table>
+                <p style="font-size: 16px;"><strong>Total:</strong> ₹${Number(total || 0).toLocaleString()}</p>
+              </div>
+            `
+          });
+        } catch (emailErr) {
+          console.error("Error sending cart lead email:", emailErr);
+        }
+      }
+
+      res.status(201).json({ success: true, cart: savedCart });
+    } catch (error) {
+      console.error("Error saving abandoned cart:", error);
+      res.status(500).json({ error: "Failed to save cart lead" });
+    }
   });
 
   // Testimonials API routes
@@ -395,6 +589,16 @@ async function startServer() {
         status: "Pending"
       });
       await newOrder.save();
+
+      await AbandonedCart.updateMany(
+        {
+          $or: [
+            { "customer.email": customer.email },
+            { "customer.phone": customer.phone }
+          ]
+        },
+        { $set: { status: "Converted" } }
+      );
 
       // Send silent email notification to admin using Resend
       if (resend) {
@@ -598,6 +802,16 @@ async function startServer() {
       });
       await newOrder.save();
 
+      await AbandonedCart.updateMany(
+        {
+          $or: [
+            { "customer.email": customer.email },
+            { "customer.phone": customer.phone }
+          ]
+        },
+        { $set: { status: "Converted" } }
+      );
+
       // Send confirmation email
       if (resend) {
         try {
@@ -736,6 +950,16 @@ async function startServer() {
     } catch (error) {
       console.error("Error fetching orders for admin:", error);
       res.status(500).json({ error: "Failed to fetch orders from database" });
+    }
+  });
+
+  app.get("/api/admin/abandoned-carts", checkAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const carts = await AbandonedCart.find({}).sort({ updatedAt: -1 });
+      res.json(carts);
+    } catch (error) {
+      console.error("Error fetching abandoned carts for admin:", error);
+      res.status(500).json({ error: "Failed to fetch cart leads" });
     }
   });
 

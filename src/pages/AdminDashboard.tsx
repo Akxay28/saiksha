@@ -6,7 +6,8 @@ import {
   X, 
   Lock, 
   LogOut, 
-  ChevronLeft, 
+  ChevronLeft,
+  ChevronRight,
   TrendingUp, 
   AlertTriangle, 
   Database,
@@ -21,13 +22,16 @@ import {
   MapPin,
   CreditCard,
   Star,
-  CheckCircle2
+  CheckCircle2,
+  Activity,
+  Users
 } from "lucide-react";
 import { useProducts } from "../context/ProductContext";
 import { Product } from "../types";
 import { toast } from "sonner";
 import logoImg from "../assets/images/saiksha-logo-mark.png";
 import { cn } from "../lib/utils";
+import { useLiveVisitors } from "../hooks/useLiveVisitors";
 
 interface AdminDashboardProps {
   onClose: () => void;
@@ -35,6 +39,7 @@ interface AdminDashboardProps {
 
 export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const { products, addProduct, updateProduct, deleteProduct } = useProducts();
+  const { activeVisitors, totalVisitors } = useLiveVisitors({ countAsVisitor: false });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [username, setUsername] = useState("");
@@ -42,12 +47,18 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<"products" | "orders" | "testimonials">("products");
+  const [activeTab, setActiveTab] = useState<"products" | "orders" | "cartLeads" | "testimonials">("products");
 
   // Orders State
   const [orders, setOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [ordersPerPage, setOrdersPerPage] = useState(10);
+  const [currentOrderPage, setCurrentOrderPage] = useState(1);
+
+  // Saved Cart Leads State
+  const [cartLeads, setCartLeads] = useState<any[]>([]);
+  const [loadingCartLeads, setLoadingCartLeads] = useState(false);
 
   // Testimonials State
   const [testimonials, setTestimonials] = useState<any[]>([]);
@@ -114,6 +125,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   useEffect(() => {
     if (isAuthenticated) {
       fetchOrders();
+      fetchCartLeads();
       fetchTestimonials();
     }
   }, [isAuthenticated]);
@@ -132,6 +144,23 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       console.error("Error fetching orders:", err);
     } finally {
       setLoadingOrders(false);
+    }
+  };
+
+  const fetchCartLeads = async () => {
+    setLoadingCartLeads(true);
+    try {
+      const response = await fetch("/api/admin/abandoned-carts", { credentials: "include" });
+      if (response.ok) {
+        const data = await response.json();
+        setCartLeads(data);
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+      }
+    } catch (err) {
+      console.error("Error fetching cart leads:", err);
+    } finally {
+      setLoadingCartLeads(false);
     }
   };
 
@@ -403,6 +432,8 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const totalProducts = products.length;
   const pendingOrdersCount = orders.filter((o) => o.status === "Pending").length;
   const totalReviewsCount = testimonials.length;
+  const totalProductViews = products.reduce((total, product) => total + (product.views || 0), 0);
+  const openCartLeadsCount = cartLeads.filter((lead) => lead.status !== "Converted").length;
 
   if (isCheckingSession) {
     return (
@@ -530,7 +561,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       <main className="max-w-7xl mx-auto px-6 md:px-12 pt-8 space-y-8">
         
         {/* Stats Grid */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
           {/* Total Catalog Stats Card */}
           <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
             <div className="space-y-1">
@@ -563,6 +594,33 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
               <MessageSquare size={24} />
             </div>
           </div>
+
+          {/* Website Visitors Stats Card */}
+          <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[9px] uppercase tracking-widest text-neutral-400 font-bold">Website Visitors</span>
+              <h3 className="text-3xl font-serif font-bold text-neutral-900">{totalVisitors.toLocaleString()}</h3>
+            </div>
+            <div className="p-4 bg-green-50 rounded-2xl text-green-600">
+              <Users size={24} />
+            </div>
+          </div>
+
+          {/* Live Visitors Stats Card */}
+          <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[9px] uppercase tracking-widest text-neutral-400 font-bold">Live Watching</span>
+              <h3 className="text-3xl font-serif font-bold text-neutral-900">
+                {activeVisitors > 0 ? `${activeVisitors} Active` : "Quiet"}
+              </h3>
+              <span className="text-[10px] text-neutral-400">
+                {totalProductViews.toLocaleString()} product views
+              </span>
+            </div>
+            <div className="p-4 bg-[#bda88e]/10 rounded-2xl text-[#a2855b]">
+              <Activity size={24} />
+            </div>
+          </div>
         </section>
 
         {/* Tab Selection Panel */}
@@ -589,6 +647,18 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
             )}
           >
             Orders ({orders.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab("cartLeads")}
+            className={cn(
+              "pb-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 cursor-pointer",
+              activeTab === "cartLeads"
+                ? "border-brand-ink text-brand-ink font-extrabold"
+                : "border-transparent text-neutral-400 hover:text-neutral-700"
+            )}
+          >
+            Cart Leads ({openCartLeadsCount})
           </button>
 
           <button
@@ -622,6 +692,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                     <th className="py-4 px-6">Price</th>
                     <th className="py-4 px-6">Stock</th>
                     <th className="py-4 px-6">Rating</th>
+                    <th className="py-4 px-6">Views</th>
                     <th className="py-4 px-6 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -672,6 +743,12 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                       </td>
                       <td className="py-4 px-6 font-semibold text-neutral-500">
                         ★ {product.rating} ({product.reviews})
+                      </td>
+                      <td className="py-4 px-6">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-50 px-2.5 py-1 text-[10px] font-bold text-neutral-600">
+                          <Eye size={12} className="text-[#a2855b]" />
+                          {(product.views || 0).toLocaleString()}
+                        </span>
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end space-x-2">
@@ -725,147 +802,305 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
               </div>
             ) : (
               <div className="space-y-4">
-                {orders.map((order) => {
-                  const isExpanded = expandedOrderId === order.orderId;
-                  const dateString = order.createdAt 
-                    ? new Date(order.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                    : "N/A";
-                  
-                  return (
-                    <div 
-                      key={order.orderId}
-                      className="bg-white rounded-2xl border border-neutral-150 shadow-xs overflow-hidden transition-all duration-300"
+                {/* ── Show-entries dropdown ── */}
+                <div className="flex items-center justify-between bg-white px-5 py-3 rounded-xl border border-neutral-100 shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] uppercase tracking-wider text-neutral-400 font-bold">Show entries</span>
+                    <select
+                      value={ordersPerPage}
+                      onChange={(e) => {
+                        setOrdersPerPage(Number(e.target.value));
+                        setCurrentOrderPage(1);
+                      }}
+                      className="text-[10px] font-bold text-neutral-700 border border-neutral-200 rounded-lg px-3 py-1.5 bg-neutral-50 focus:outline-none focus:ring-1 focus:ring-brand-rosegold cursor-pointer"
                     >
-                      {/* Accordion Trigger Header */}
+                      {/* Only show page-size options smaller than total orders */}
+                      {[10, 20, 30, 50, 100, 200].filter(n => n < orders.length).map((n) => (
+                        <option key={n} value={n}>Show {n}</option>
+                      ))}
+                      {/* Always show a single "Show All" at the end */}
+                      <option value={orders.length}>Show All ({orders.length})</option>
+                    </select>
+                  </div>
+                  <span className="text-[10px] text-neutral-400 font-mono">
+                    {ordersPerPage >= orders.length
+                      ? `Showing all ${orders.length} orders`
+                      : `Showing ${(currentOrderPage - 1) * ordersPerPage + 1}–${Math.min(currentOrderPage * ordersPerPage, orders.length)} of ${orders.length} orders`}
+                  </span>
+                </div>
+
+                {/* ── Orders list (current page slice) ── */}
+                {orders
+                  .slice((currentOrderPage - 1) * ordersPerPage, currentOrderPage * ordersPerPage)
+                  .map((order) => {
+                    const isExpanded = expandedOrderId === order.orderId;
+                    const dateString = order.createdAt 
+                      ? new Date(order.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                      : "N/A";
+                    
+                    return (
                       <div 
-                        onClick={() => setExpandedOrderId(isExpanded ? null : order.orderId)}
-                        className="p-5 md:p-6 flex flex-wrap items-center justify-between gap-4 cursor-pointer hover:bg-neutral-50/50"
+                        key={order.orderId}
+                        className="bg-white rounded-2xl border border-neutral-150 shadow-xs overflow-hidden transition-all duration-300"
                       >
-                        <div className="flex items-center space-x-4 min-w-0 flex-1">
-                          <div className="w-10 h-10 rounded-full bg-brand-cream flex items-center justify-center shrink-0">
-                            <Clock size={16} className="text-brand-rosegold" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center space-x-2">
-                              <span className="font-mono font-bold text-xs text-neutral-900">{order.orderId}</span>
-                              <span className="text-[10px] text-neutral-400">• {dateString}</span>
+                        {/* Accordion Trigger Header */}
+                        <div 
+                          onClick={() => setExpandedOrderId(isExpanded ? null : order.orderId)}
+                          className="p-5 md:p-6 flex flex-wrap items-center justify-between gap-4 cursor-pointer hover:bg-neutral-50/50"
+                        >
+                          <div className="flex items-center space-x-4 min-w-0 flex-1">
+                            <div className="w-10 h-10 rounded-full bg-brand-cream flex items-center justify-center shrink-0">
+                              <Clock size={16} className="text-brand-rosegold" />
                             </div>
-                            <span className="text-xs text-neutral-550 truncate block mt-0.5">
-                              {order.customer.firstName} {order.customer.lastName} ({order.customer.city})
-                            </span>
+                            <div className="min-w-0">
+                              <div className="flex items-center space-x-2">
+                                <span className="font-mono font-bold text-xs text-neutral-900">{order.orderId}</span>
+                                <span className="text-[10px] text-neutral-400">• {dateString}</span>
+                              </div>
+                              <span className="text-xs text-neutral-550 truncate block mt-0.5">
+                                {order.customer.firstName} {order.customer.lastName} ({order.customer.city})
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-6">
+                            <div className="text-right">
+                              <span className="font-bold text-xs text-neutral-900 block">₹{order.total.toLocaleString()}</span>
+                              <span className="text-[9px] uppercase tracking-wider text-neutral-450 block mt-0.5">{order.items.length} {order.items.length === 1 ? "Piece" : "Pieces"}</span>
+                            </div>
+                            
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <select
+                                value={order.status}
+                                onChange={(e) => handleUpdateOrderStatus(order.orderId, e.target.value)}
+                                className={cn(
+                                  "text-[9px] uppercase tracking-wider font-extrabold px-3 py-1.5 rounded-full outline-none cursor-pointer border",
+                                  order.status === "Pending" && "bg-amber-50 text-amber-600 border-amber-200",
+                                  order.status === "Confirmed" && "bg-blue-50 text-blue-600 border-blue-200",
+                                  order.status === "Shipped" && "bg-indigo-50 text-indigo-600 border-indigo-200",
+                                  order.status === "Delivered" && "bg-green-50 text-green-600 border-green-200",
+                                  order.status === "Cancelled" && "bg-red-50 text-red-600 border-red-200"
+                                )}
+                              >
+                                <option value="Pending">Pending</option>
+                                <option value="Confirmed">Confirmed</option>
+                                <option value="Shipped">Shipped</option>
+                                <option value="Delivered">Delivered</option>
+                                <option value="Cancelled">Cancelled</option>
+                              </select>
+                            </div>
+
+                            <div className="text-neutral-400">
+                              {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </div>
                           </div>
                         </div>
 
-                        <div className="flex items-center space-x-6">
-                          <div className="text-right">
-                            <span className="font-bold text-xs text-neutral-900 block">₹{order.total.toLocaleString()}</span>
-                            <span className="text-[9px] uppercase tracking-wider text-neutral-450 block mt-0.5">{order.items.length} {order.items.length === 1 ? "Piece" : "Pieces"}</span>
-                          </div>
-                          
-                          <div onClick={(e) => e.stopPropagation()}>
-                            <select
-                              value={order.status}
-                              onChange={(e) => handleUpdateOrderStatus(order.orderId, e.target.value)}
-                              className={cn(
-                                "text-[9px] uppercase tracking-wider font-extrabold px-3 py-1.5 rounded-full outline-none cursor-pointer border",
-                                order.status === "Pending" && "bg-amber-50 text-amber-600 border-amber-200",
-                                order.status === "Confirmed" && "bg-blue-50 text-blue-600 border-blue-200",
-                                order.status === "Shipped" && "bg-indigo-50 text-indigo-600 border-indigo-200",
-                                order.status === "Delivered" && "bg-green-50 text-green-600 border-green-200",
-                                order.status === "Cancelled" && "bg-red-50 text-red-600 border-red-200"
-                              )}
-                            >
-                              <option value="Pending">Pending</option>
-                              <option value="Confirmed">Confirmed</option>
-                              <option value="Shipped">Shipped</option>
-                              <option value="Delivered">Delivered</option>
-                              <option value="Cancelled">Cancelled</option>
-                            </select>
-                          </div>
+                        {/* Accordion Details Panel */}
+                        {isExpanded && (
+                          <div className="border-t border-neutral-100 bg-[#fbfbfa]/30 p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 text-xs">
+                            {/* Shipping / Customer column */}
+                            <div className="lg:col-span-5 space-y-4 border-b lg:border-b-0 lg:border-r border-neutral-100 pb-6 lg:pb-0 lg:pr-8">
+                              <div className="space-y-1">
+                                <span className="text-[9px] uppercase tracking-wider text-neutral-400 font-extrabold">Shipping Coordinates</span>
+                                <p className="font-bold text-neutral-900 text-sm">
+                                  {order.customer.firstName} {order.customer.lastName}
+                                </p>
+                                <p className="text-neutral-500 font-light leading-relaxed">
+                                  {order.customer.address},<br />
+                                  {order.customer.city} - {order.customer.postalCode}
+                                </p>
+                              </div>
 
-                          <div className="text-neutral-400">
-                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                              <div className="space-y-2 pt-2">
+                                <span className="text-[9px] uppercase tracking-wider text-neutral-400 font-extrabold">Contact Details</span>
+                                <p className="text-neutral-700 flex items-center gap-2">
+                                  <Mail size={13} className="text-neutral-400" /> {order.customer.email}
+                                </p>
+                                <p className="text-neutral-700 flex items-center gap-2">
+                                  <Phone size={13} className="text-neutral-400" /> {order.customer.phone} 
+                                  <span className="text-[8px] uppercase tracking-wider bg-brand-rosegold/10 text-brand-rosegold px-1.5 py-0.5 rounded font-bold">Primary</span>
+                                </p>
+                                {order.customer.secondaryPhone && (
+                                  <p className="text-neutral-700 flex items-center gap-2">
+                                    <Phone size={13} className="text-neutral-400" /> {order.customer.secondaryPhone} 
+                                    <span className="text-[8px] uppercase tracking-wider bg-neutral-100 text-neutral-500 px-1.5 py-0.5 rounded font-bold">Secondary</span>
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1 pt-2">
+                                <span className="text-[9px] uppercase tracking-wider text-neutral-400 font-extrabold">Payment Parameters</span>
+                                <p className="font-bold text-[#ad854f] uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+                                  <CreditCard size={13} /> {order.paymentMethod}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Items Purchased column */}
+                            <div className="lg:col-span-7 space-y-4">
+                              <span className="text-[9px] uppercase tracking-wider text-neutral-400 font-extrabold">Jewelry Selection ({order.items.length})</span>
+                              <div className="space-y-3">
+                                {order.items.map((item: any) => (
+                                  <div key={item.id + item.name} className="flex items-center space-x-4 bg-white p-3 rounded-xl border border-black/5 shadow-xxs">
+                                    <div className="w-10 h-12 rounded bg-neutral-100 overflow-hidden shrink-0 border border-neutral-100">
+                                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                                    </div>
+                                    <div className="flex-grow min-w-0">
+                                      <h5 className="font-bold text-neutral-800 text-xs truncate">{item.name}</h5>
+                                      <span className="text-[10px] text-neutral-400 font-mono mt-0.5 block">ID: {item.id} • Qty {item.quantity}</span>
+                                    </div>
+                                    <span className="font-bold text-neutral-900 text-xs shrink-0">₹{item.price.toLocaleString()}</span>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Order Totals card */}
+                              <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-100 space-y-2 mt-4">
+                                <div className="flex justify-between text-[11px] text-neutral-500">
+                                  <span>Subtotal</span>
+                                  <span className="font-bold">₹{order.subTotal.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between text-[11px] text-neutral-500">
+                                  <span>Shipping & Handling</span>
+                                  <span className="font-bold text-brand-rosegold">{order.shipping === 0 ? "FREE" : `₹${order.shipping.toLocaleString()}`}</span>
+                                </div>
+                                <div className="flex justify-between text-xs font-bold border-t border-neutral-200/60 pt-2 text-neutral-900">
+                                  <span>Grand Total</span>
+                                  <span>₹{order.total.toLocaleString()}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                {/* ── Pagination bar ── */}
+                {(() => {
+                  const totalPages = Math.ceil(orders.length / ordersPerPage);
+                  if (totalPages <= 1) return null;
+                  const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
+                  return (
+                    <div className="flex items-center justify-between bg-white px-5 py-3 rounded-xl border border-neutral-100 shadow-xs">
+                      <span className="text-[10px] text-neutral-400 font-mono">
+                        Page {currentOrderPage} of {totalPages}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {/* Prev button */}
+                        <button
+                          onClick={() => setCurrentOrderPage((p) => Math.max(1, p - 1))}
+                          disabled={currentOrderPage === 1}
+                          className="p-1.5 rounded-lg border border-neutral-200 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                          <ChevronLeft size={14} />
+                        </button>
+
+                        {/* Page number buttons */}
+                        {pages.map((page) => (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentOrderPage(page)}
+                            className={cn(
+                              "min-w-[32px] h-8 px-2 rounded-lg text-[10px] font-bold border transition-all",
+                              currentOrderPage === page
+                                ? "bg-brand-ink text-white border-brand-ink"
+                                : "bg-white text-neutral-500 border-neutral-200 hover:bg-neutral-50 hover:text-neutral-800"
+                            )}
+                          >
+                            {page}
+                          </button>
+                        ))}
+
+                        {/* Next button */}
+                        <button
+                          onClick={() => setCurrentOrderPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={currentOrderPage === totalPages}
+                          className="p-1.5 rounded-lg border border-neutral-200 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* TAB VIEW 3: SAVED / ABANDONED CART LEADS */}
+        {activeTab === "cartLeads" && (
+          <section className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">Saved Bag Leads</h4>
+                <p className="text-[10px] text-neutral-450 mt-0.5">Customers who shared contact details after adding products to their bag.</p>
+              </div>
+              <button
+                onClick={fetchCartLeads}
+                className="text-[9px] uppercase font-bold tracking-widest text-[#a2855b] hover:text-[#7a603c]"
+              >
+                Refresh Data
+              </button>
+            </div>
+
+            {loadingCartLeads ? (
+              <div className="bg-white rounded-2xl border border-neutral-100 p-10 text-center text-xs uppercase tracking-widest text-neutral-400 font-bold">
+                Loading cart leads...
+              </div>
+            ) : cartLeads.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-neutral-100 p-10 text-center text-neutral-400">
+                No saved bag leads yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {cartLeads.map((lead) => {
+                  const savedDate = lead.updatedAt
+                    ? new Date(lead.updatedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+                    : "N/A";
+
+                  return (
+                    <div key={lead._id || lead.sessionId} className="bg-white rounded-2xl border border-neutral-100 p-6 shadow-xs space-y-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <h5 className="font-serif text-lg font-bold text-neutral-950">{lead.customer?.name}</h5>
+                          <div className="space-y-1 text-xs text-neutral-500">
+                            <p className="flex items-center gap-2">
+                              <Mail size={13} className="text-neutral-400" />
+                              {lead.customer?.email}
+                            </p>
+                            <p className="flex items-center gap-2">
+                              <Phone size={13} className="text-neutral-400" />
+                              {lead.customer?.phone}
+                            </p>
                           </div>
                         </div>
+                        <span className="rounded-full bg-amber-50 px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-700 border border-amber-100">
+                          {lead.status || "Open"}
+                        </span>
                       </div>
 
-                      {/* Accordion Details Panel */}
-                      {isExpanded && (
-                        <div className="border-t border-neutral-100 bg-[#fbfbfa]/30 p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 text-xs">
-                          {/* Shipping / Customer column */}
-                          <div className="lg:col-span-5 space-y-4 border-b lg:border-b-0 lg:border-r border-neutral-100 pb-6 lg:pb-0 lg:pr-8">
-                            <div className="space-y-1">
-                              <span className="text-[9px] uppercase tracking-wider text-neutral-400 font-extrabold">Shipping Coordinates</span>
-                              <p className="font-bold text-neutral-900 text-sm">
-                                {order.customer.firstName} {order.customer.lastName}
-                              </p>
-                              <p className="text-neutral-500 font-light leading-relaxed">
-                                {order.customer.address},<br />
-                                {order.customer.city} - {order.customer.postalCode}
-                              </p>
+                      <div className="space-y-3">
+                        {(lead.items || []).map((item: any) => (
+                          <div key={`${lead.sessionId}-${item.id}`} className="flex items-center gap-3 rounded-xl bg-neutral-50 p-3">
+                            <div className="h-12 w-10 shrink-0 overflow-hidden rounded bg-white border border-neutral-100">
+                              <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
                             </div>
-
-                            <div className="space-y-2 pt-2">
-                              <span className="text-[9px] uppercase tracking-wider text-neutral-400 font-extrabold">Contact Details</span>
-                              <p className="text-neutral-700 flex items-center gap-2">
-                                <Mail size={13} className="text-neutral-400" /> {order.customer.email}
-                              </p>
-                              <p className="text-neutral-700 flex items-center gap-2">
-                                <Phone size={13} className="text-neutral-400" /> {order.customer.phone} 
-                                <span className="text-[8px] uppercase tracking-wider bg-brand-rosegold/10 text-brand-rosegold px-1.5 py-0.5 rounded font-bold">Primary</span>
-                              </p>
-                              {order.customer.secondaryPhone && (
-                                <p className="text-neutral-700 flex items-center gap-2">
-                                  <Phone size={13} className="text-neutral-400" /> {order.customer.secondaryPhone} 
-                                  <span className="text-[8px] uppercase tracking-wider bg-neutral-100 text-neutral-500 px-1.5 py-0.5 rounded font-bold">Secondary</span>
-                                </p>
-                              )}
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-bold text-neutral-800">{item.name}</p>
+                              <p className="text-[10px] text-neutral-400">Qty {item.quantity}</p>
                             </div>
-
-                            <div className="space-y-1 pt-2">
-                              <span className="text-[9px] uppercase tracking-wider text-neutral-400 font-extrabold">Payment Parameters</span>
-                              <p className="font-bold text-[#ad854f] uppercase text-[10px] tracking-wider flex items-center gap-1.5">
-                                <CreditCard size={13} /> {order.paymentMethod}
-                              </p>
-                            </div>
+                            <span className="text-xs font-bold text-neutral-900">Rs {Number(item.price || 0).toLocaleString()}</span>
                           </div>
+                        ))}
+                      </div>
 
-                          {/* Items Purchased column */}
-                          <div className="lg:col-span-7 space-y-4">
-                            <span className="text-[9px] uppercase tracking-wider text-neutral-400 font-extrabold">Jewelry Selection ({order.items.length})</span>
-                            <div className="space-y-3">
-                              {order.items.map((item: any) => (
-                                <div key={item.id + item.name} className="flex items-center space-x-4 bg-white p-3 rounded-xl border border-black/5 shadow-xxs">
-                                  <div className="w-10 h-12 rounded bg-neutral-100 overflow-hidden shrink-0 border border-neutral-100">
-                                    <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                                  </div>
-                                  <div className="flex-grow min-w-0">
-                                    <h5 className="font-bold text-neutral-800 text-xs truncate">{item.name}</h5>
-                                    <span className="text-[10px] text-neutral-400 font-mono mt-0.5 block">ID: {item.id} • Qty {item.quantity}</span>
-                                  </div>
-                                  <span className="font-bold text-neutral-900 text-xs shrink-0">₹{item.price.toLocaleString()}</span>
-                                </div>
-                              ))}
-                            </div>
-
-                            {/* Order Totals card */}
-                            <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-100 space-y-2 mt-4">
-                              <div className="flex justify-between text-[11px] text-neutral-500">
-                                <span>Subtotal</span>
-                                <span className="font-bold">₹{order.subTotal.toLocaleString()}</span>
-                              </div>
-                              <div className="flex justify-between text-[11px] text-neutral-500">
-                                <span>Shipping & Handling</span>
-                                <span className="font-bold text-brand-rosegold">{order.shipping === 0 ? "FREE" : `₹${order.shipping.toLocaleString()}`}</span>
-                              </div>
-                              <div className="flex justify-between text-xs font-bold border-t border-neutral-200/60 pt-2 text-neutral-900">
-                                <span>Grand Total</span>
-                                <span>₹{order.total.toLocaleString()}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                      <div className="flex items-center justify-between border-t border-neutral-100 pt-4 text-xs">
+                        <span className="text-neutral-400">Saved {savedDate}</span>
+                        <span className="font-bold text-neutral-950">Total Rs {Number(lead.total || 0).toLocaleString()}</span>
+                      </div>
                     </div>
                   );
                 })}

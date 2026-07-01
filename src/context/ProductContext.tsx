@@ -15,6 +15,7 @@ interface ProductContextType {
   addProduct: (productData: Omit<Product, "id">) => Promise<ProductActionResult>;
   updateProduct: (id: string, productData: Partial<Product>) => Promise<ProductActionResult>;
   deleteProduct: (id: string) => Promise<ProductActionResult>;
+  recordProductView: (id: string) => Promise<number | null>;
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
@@ -128,8 +129,26 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const recordProductView = async (id: string) => {
+    try {
+      const response = await fetch(`/api/products/${id}/view`, {
+        method: "POST",
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
+      const views = typeof data.views === "number" ? data.views : null;
+      if (views !== null) {
+        setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, views } : p)));
+      }
+      return views;
+    } catch (err) {
+      console.error("Error recording product view:", err);
+      return null;
+    }
+  };
+
   return (
-    <ProductContext.Provider value={{ products, loading, error, getProductById, addProduct, updateProduct, deleteProduct }}>
+    <ProductContext.Provider value={{ products, loading, error, getProductById, addProduct, updateProduct, deleteProduct, recordProductView }}>
       {children}
     </ProductContext.Provider>
   );

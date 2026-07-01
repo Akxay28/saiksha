@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   Star,
@@ -18,7 +18,8 @@ import {
   Gem,
   Gift,
   CheckCircle2,
-  ChevronLeft
+  ChevronLeft,
+  Eye
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { categorySpecifications } from "../data/categorySpecifications";
@@ -34,7 +35,7 @@ import Testimonials from "../components/sections/Testimonials";
 import TrustSection from "../components/sections/TrustSection";
 
 export default function ProductDetail() {
-  const { products } = useProducts();
+  const { products, recordProductView } = useProducts();
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
@@ -44,6 +45,7 @@ export default function ProductDetail() {
   const [selectedSize, setSelectedSize] = useState("Standard");
   const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [productViewCount, setProductViewCount] = useState<number | null>(null);
 
   // Experience modal form states
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -59,6 +61,28 @@ export default function ProductDetail() {
   const [openSection, setOpenSection] = useState<string | null>("details");
 
   const product = products.find(p => p.id === id);
+
+  useEffect(() => {
+    if (!id || !product) return;
+
+    let isMounted = true;
+    const viewedKey = `saiksha_product_viewed_${id}`;
+    const initialViews = product.views || 0;
+    setProductViewCount(initialViews);
+
+    if (sessionStorage.getItem(viewedKey)) return;
+    sessionStorage.setItem(viewedKey, "1");
+
+    recordProductView(id).then((views) => {
+      if (isMounted && views !== null) {
+        setProductViewCount(views);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id, product?.id, product?.views, recordProductView]);
 
   if (!product) {
     return (
@@ -341,6 +365,15 @@ export default function ProductDetail() {
             <p className="text-neutral-600 leading-relaxed font-sans text-sm md:text-base">
               {product.description}
             </p>
+
+            {(productViewCount || 0) > 0 && (
+              <div className="inline-flex items-center space-x-2 bg-[#faf9f6] border border-[#bda88e]/25 text-neutral-650 px-3 py-2 rounded-lg text-xs font-medium">
+                <Eye size={14} className="text-[#a2855b]" />
+                <span>
+                  {productViewCount?.toLocaleString()} {productViewCount === 1 ? "person has" : "people have"} viewed this piece
+                </span>
+              </div>
+            )}
 
             {/* Dynamic Stock Indicator */}
             {product.stock === 0 ? (

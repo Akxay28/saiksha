@@ -1,15 +1,23 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ShoppingCart, Heart, Search, Menu, X } from "lucide-react";
+import {
+  Heart,
+  Search,
+  ShoppingCart,
+  Menu,
+  X
+} from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../../lib/utils";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
+import { useLiveVisitors } from "../../hooks/useLiveVisitors";
 import logoImg from "../../assets/images/saiksha-logo-mark.png";
 
 export default function Navbar() {
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
+  const { activeVisitors } = useLiveVisitors();
   const location = useLocation();
   const navigate = useNavigate();
   const [isScrolled, setIsScrolled] = useState(false);
@@ -74,31 +82,23 @@ export default function Navbar() {
     { name: "Home", path: "/" },
     { name: "Earrings", path: "/collection?category=Earrings" },
     { name: "Necklaces", path: "/collection?category=Necklaces" },
-    { name: "Best Sellers", path: "/collection?category=Bestsellers" },
+    { name: "Bestsellers", path: "/collection?category=Bestsellers" },
     { name: "Gifts", path: "/collection?category=Gifts" },
-    { name: "Reviews", path: "/testimonials" },
     { name: "About", path: "/about" },
-    { name: "FAQs", path: "/faq" },
-    { name: "Contact", path: "/contact" },
   ];
 
   return (
     <>
       <nav
         className={cn(
-          "sticky z-40 w-full transition-all duration-500",
+          "sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md transition-shadow duration-200",
           isScrolled
-            ? "top-3 bg-transparent px-3 md:px-6"
-            : "top-0 bg-white/95 backdrop-blur-md"
+            ? "shadow-[0_8px_24px_rgba(10,10,10,0.06)]"
+            : "shadow-[inset_0_-1px_0_rgba(10,10,10,0.08)]"
         )}
       >
         <div
-          className={cn(
-            "relative mx-auto flex items-center justify-between transition-all duration-500",
-            isScrolled
-              ? "saiksha-floating-nav max-w-6xl rounded-full px-5 py-3 shadow-[0_18px_50px_rgba(10,10,10,0.08)] md:px-8"
-              : "max-w-7xl px-6 py-4 shadow-[inset_0_-1px_0_rgba(10,10,10,0.08)] md:px-10"
-          )}
+          className="relative mx-auto flex max-w-7xl items-center justify-between px-6 py-3.5 md:px-10"
         >
           {/* Mobile Menu Trigger */}
           <button 
@@ -116,24 +116,18 @@ export default function Navbar() {
             <img 
               src={logoImg} 
               alt="Saiksha Logo" 
-              className={cn(
-                "rounded-full object-cover ring-1 ring-brand-rosegold/20 shadow-sm transition-all duration-500 group-hover:scale-105",
-                isScrolled ? "h-9 w-9 md:h-10 md:w-10" : "h-11 w-11 md:h-12 md:w-12"
-              )}
+              className="h-11 w-11 rounded-full object-cover ring-1 ring-brand-rosegold/20 shadow-sm transition-transform duration-200 group-hover:scale-105 md:h-12 md:w-12"
               referrerPolicy="no-referrer"
             />
             <span
-              className={cn(
-                "font-serif tracking-[0.2em] text-brand-ink font-bold uppercase transition-all duration-500 group-hover:text-brand-rosegold",
-                isScrolled ? "text-base md:text-lg" : "text-lg md:text-xl"
-              )}
+              className="font-serif text-lg tracking-[0.2em] text-brand-ink font-bold uppercase transition-colors duration-200 group-hover:text-brand-rosegold md:text-xl"
             >
               SAIKSHA
             </span>
           </div>
 
           {/* Desktop Nav */}
-          <div className={cn("hidden lg:flex items-center transition-all duration-500", isScrolled ? "space-x-7" : "space-x-10")}>
+          <div className="hidden lg:flex items-center gap-9">
             {navLinks.map((link) => {
               const isActive = location.pathname + location.search === link.path;
               return (
@@ -141,8 +135,7 @@ export default function Navbar() {
                   key={link.name}
                   to={link.path}
                   className={cn(
-                    "relative uppercase tracking-[2px] font-bold py-1.5 transition-all duration-300 group",
-                    isScrolled ? "text-[10px]" : "text-[11px]",
+                    "relative whitespace-nowrap uppercase tracking-[2px] font-bold py-1.5 text-[11px] transition-colors duration-200 group",
                     isActive ? "text-brand-rosegold" : "text-brand-ink hover:text-brand-hotpink"
                   )}
                 >
@@ -159,14 +152,26 @@ export default function Navbar() {
           </div>
 
           {/* Icons */}
-          <div className={cn("flex items-center transition-all duration-500", isScrolled ? "space-x-3 md:space-x-5" : "space-x-4 md:space-x-6")}>
+          <div className="flex items-center space-x-4 md:space-x-6">
+            {activeVisitors > 0 && (
+              <div
+                className={cn(
+                  "hidden xl:flex items-center gap-1.5 rounded-full border border-green-100 bg-green-50/80 px-2.5 py-1 text-[10px] font-semibold tracking-normal text-neutral-650 shadow-sm",
+                  isScrolled && "border-neutral-100 bg-white"
+                )}
+                title={`${activeVisitors} active ${activeVisitors === 1 ? "visitor" : "visitors"} on the website`}
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-50" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                </span>
+                <span>{activeVisitors} active</span>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => setIsSearchOpen((current) => !current)}
-              className={cn(
-                "text-brand-ink hover:text-brand-hotpink transition-colors hidden sm:block",
-                isScrolled && "rounded-full bg-brand-cream/60 p-2"
-              )}
+              className="text-brand-ink hover:text-brand-hotpink transition-colors hidden sm:block"
               aria-label="Search products"
             >
               <Search size={21} strokeWidth={1.2} />
@@ -204,7 +209,7 @@ export default function Navbar() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               onSubmit={handleSearchSubmit}
-              className={cn("mx-auto px-6 md:px-10 pt-4", isScrolled ? "max-w-6xl" : "max-w-7xl")}
+              className="mx-auto max-w-7xl px-6 md:px-10 pt-4"
             >
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" size={16} />

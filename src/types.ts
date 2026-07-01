@@ -24,6 +24,7 @@ export interface Product {
   packaging?: string;
   shippingRoute?: string;
   exchangePolicy?: string;
+  views?: number;
 }
 
 export interface CartItem extends Product {

@@ -29,11 +29,82 @@ export default function Checkout() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("6351357299");
+  const [phone, setPhone] = useState("");
   const [secondaryPhone, setSecondaryPhone] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [postalCode, setPostalCode] = useState("");
+
+  // Field-level validation errors
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    secondaryPhone: "",
+    address: "",
+    city: "",
+    postalCode: "",
+  });
+
+  const setError = (field: string, msg: string) =>
+    setFieldErrors((prev) => ({ ...prev, [field]: msg }));
+  const clearError = (field: string) =>
+    setFieldErrors((prev) => ({ ...prev, [field]: "" }));
+
+  // Individual field validators (return error string or "")
+  const rules = {
+    firstName: (v: string) =>
+      !v.trim() ? "First name is required"
+      : !/^[a-zA-Z\s'-]+$/.test(v.trim()) ? "First name should contain only letters"
+      : v.trim().length < 2 ? "First name must be at least 2 characters"
+      : "",
+    lastName: (v: string) =>
+      !v.trim() ? "Last name is required"
+      : !/^[a-zA-Z\s'-]+$/.test(v.trim()) ? "Last name should contain only letters"
+      : v.trim().length < 2 ? "Last name must be at least 2 characters"
+      : "",
+    email: (v: string) =>
+      !v.trim() ? "Email address is required"
+      : !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim()) ? "Please enter a valid email address"
+      : "",
+    phone: (v: string) => {
+      const digits = v.replace(/\D/g, "");
+      return !v.trim() ? "Primary mobile number is required"
+        : digits.length !== 10 ? "Mobile number must be exactly 10 digits"
+        : !/^[6-9]/.test(digits) ? "Mobile number must start with 6, 7, 8 or 9"
+        : "";
+    },
+    secondaryPhone: (v: string) => {
+      if (!v.trim()) return "";
+      const digits = v.replace(/\D/g, "");
+      return digits.length !== 10 ? "Secondary number must be exactly 10 digits"
+        : !/^[6-9]/.test(digits) ? "Secondary number must start with 6, 7, 8 or 9"
+        : "";
+    },
+    address: (v: string) =>
+      !v.trim() ? "Delivery address is required"
+      : v.trim().length < 10 ? "Please enter a complete address (min 10 characters)"
+      : "",
+    city: (v: string) =>
+      !v.trim() ? "City / Town is required"
+      : !/^[a-zA-Z\s'-]+$/.test(v.trim()) ? "City name should contain only letters"
+      : "",
+    postalCode: (v: string) => {
+      const digits = v.replace(/\D/g, "");
+      return !v.trim() ? "Postal code / PIN is required"
+        : digits.length !== 6 ? "PIN code must be exactly 6 digits"
+        : !/^[1-9]/.test(digits) ? "PIN code cannot start with 0"
+        : "";
+    },
+  };
+
+  const validateField = (field: string, value: string) => {
+    const fn = rules[field as keyof typeof rules];
+    const err = fn ? fn(value) : "";
+    setFieldErrors((prev) => ({ ...prev, [field]: err }));
+    return err;
+  };
 
   // Payment State
   const [paymentMethod, setPaymentMethod] = useState<"cod" | "upi">("cod");
@@ -42,6 +113,7 @@ export default function Checkout() {
   // Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
+
 
   // Draw items from live cart or use top signature products as fallback (for preview/test safety)
   const checkoutItems = cart.length > 0
@@ -57,9 +129,10 @@ export default function Checkout() {
     ? cartTotal 
     : checkoutItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-  const discount = paymentMethod === "upi" ? Math.round(subTotal * 0.1) : 0;
-  const shipping: number = paymentMethod === "cod" ? 40 : 0;
-  const total = subTotal - discount + shipping;
+  // All orders: FREE shipping, no extra charges, no hidden fees
+  const discount = 0;
+  const shipping = 0;
+  const total = subTotal;
 
   const handleCopyUpi = () => {
     navigator.clipboard.writeText("saiksha@upi");
@@ -69,35 +142,22 @@ export default function Checkout() {
   };
 
   const validateShippingForm = () => {
-    if (!firstName.trim()) {
-      toast.error("First Name is required");
-      return false;
+    const fields = { firstName, lastName, email, phone, secondaryPhone, address, city, postalCode };
+    let allErrors: Record<string, string> = {};
+    let isValid = true;
+    (Object.entries(fields) as [string, string][]).forEach(([field, value]) => {
+      const fn = rules[field as keyof typeof rules];
+      const err = fn ? fn(value) : "";
+      allErrors[field] = err;
+      if (err) isValid = false;
+    });
+    setFieldErrors(allErrors);
+    if (!isValid) {
+      // Find first error and toast it
+      const first = Object.values(allErrors).find((e) => e);
+      if (first) toast.error(first);
     }
-    if (!lastName.trim()) {
-      toast.error("Last Name is required");
-      return false;
-    }
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast.error("A valid email address is required");
-      return false;
-    }
-    if (!phone.trim() || phone.trim().length < 8) {
-      toast.error("A valid primary phone number is required");
-      return false;
-    }
-    if (!address.trim()) {
-      toast.error("Shipping address is required");
-      return false;
-    }
-    if (!city.trim()) {
-      toast.error("City is required");
-      return false;
-    }
-    if (!postalCode.trim() || postalCode.trim().length < 5) {
-      toast.error("A valid postal code is required");
-      return false;
-    }
-    return true;
+    return isValid;
   };
 
   const handleContinueToPayment = (e: React.FormEvent) => {
@@ -386,14 +446,18 @@ export default function Checkout() {
                   label="First Name *" 
                   placeholder="Aishwarya" 
                   value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
+                  onChange={(e) => { setFirstName(e.target.value); clearError("firstName"); }}
+                  onBlur={(e) => validateField("firstName", e.target.value)}
+                  error={fieldErrors.firstName}
                   required
                 />
                 <Input 
                   label="Last Name *" 
                   placeholder="R." 
                   value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
+                  onChange={(e) => { setLastName(e.target.value); clearError("lastName"); }}
+                  onBlur={(e) => validateField("lastName", e.target.value)}
+                  error={fieldErrors.lastName}
                   required
                 />
                 
@@ -403,34 +467,50 @@ export default function Checkout() {
                     placeholder="aishwarya@example.com" 
                     type="email" 
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => { setEmail(e.target.value); clearError("email"); }}
+                    onBlur={(e) => validateField("email", e.target.value)}
+                    error={fieldErrors.email}
                     required
                   />
                 </div>
 
                 <Input 
                   label="Primary Mobile Number *" 
-                  placeholder="e.g. +91 9876543210" 
+                  placeholder="e.g. 9876543210" 
                   type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^0-9+\-\s]/g, "");
+                    setPhone(val);
+                    clearError("phone");
+                  }}
+                  onBlur={(e) => validateField("phone", e.target.value)}
+                  error={fieldErrors.phone}
                   required
                 />
 
                 <Input 
                   label="Secondary Mobile (Optional)" 
-                  placeholder="e.g. +91 9998887776" 
+                  placeholder="e.g. 9998887776" 
                   type="tel"
                   value={secondaryPhone}
-                  onChange={(e) => setSecondaryPhone(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^0-9+\-\s]/g, "");
+                    setSecondaryPhone(val);
+                    clearError("secondaryPhone");
+                  }}
+                  onBlur={(e) => validateField("secondaryPhone", e.target.value)}
+                  error={fieldErrors.secondaryPhone}
                 />
 
                 <div className="md:col-span-2">
                   <Input 
                     label="Delivery Address *" 
-                    placeholder="Flat No, Wing, Building Name, Street Address *" 
+                    placeholder="Flat No, Wing, Building Name, Street Address" 
                     value={address}
-                    onChange={(e) => setAddress(e.target.value)}
+                    onChange={(e) => { setAddress(e.target.value); clearError("address"); }}
+                    onBlur={(e) => validateField("address", e.target.value)}
+                    error={fieldErrors.address}
                     required
                   />
                 </div>
@@ -439,15 +519,24 @@ export default function Checkout() {
                   label="City / Town *" 
                   placeholder="Mumbai" 
                   value={city}
-                  onChange={(e) => setCity(e.target.value)}
+                  onChange={(e) => { setCity(e.target.value); clearError("city"); }}
+                  onBlur={(e) => validateField("city", e.target.value)}
+                  error={fieldErrors.city}
                   required
                 />
                 
                 <Input 
                   label="Postal Code / PIN *" 
                   placeholder="400001" 
+                  type="tel"
                   value={postalCode}
-                  onChange={(e) => setPostalCode(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                    setPostalCode(val);
+                    clearError("postalCode");
+                  }}
+                  onBlur={(e) => validateField("postalCode", e.target.value)}
+                  error={fieldErrors.postalCode}
                   required
                 />
               </div>
@@ -470,65 +559,83 @@ export default function Checkout() {
                 <p className="text-[10px] text-neutral-400">Choose how you would like to handle the purchase transaction.</p>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-3">
+
+                {/* Free Shipping Trust Banner */}
+                <div className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-2xl px-5 py-3.5">
+                  <div className="text-green-500 shrink-0 text-lg">🎁</div>
+                  <div>
+                    <p className="text-xs font-bold text-green-700">You've unlocked FREE Shipping!</p>
+                    <p className="text-[10px] text-green-600 mt-0.5">Worth <span className="font-bold">₹40</span> — applied automatically. No extra charges, ever.</p>
+                  </div>
+                </div>
+
                 {/* Cash on Delivery option */}
                 <label 
                   onClick={() => setPaymentMethod("cod")}
                   className={cn(
-                    "flex items-center justify-between p-5 border-2 rounded-2xl bg-white cursor-pointer transition-all",
+                    "flex items-start justify-between p-5 border-2 rounded-2xl bg-white cursor-pointer transition-all gap-4",
                     paymentMethod === "cod" 
-                      ? "border-brand-ink ring-1 ring-brand-ink" 
-                      : "border-neutral-100 hover:border-brand-rosegold/30"
+                      ? "border-brand-ink ring-1 ring-brand-ink bg-neutral-50/50" 
+                      : "border-neutral-100 hover:border-neutral-300"
                   )}
                 >
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-start space-x-4">
                     <div className={cn(
-                      "w-4 h-4 rounded-full border-4 flex items-center justify-center",
+                      "w-4 h-4 rounded-full border-4 mt-0.5 shrink-0 transition-all",
                       paymentMethod === "cod" ? "border-brand-ink" : "border-neutral-300"
                     )} />
                     <div>
                       <h4 className="font-bold text-xs text-neutral-800">Cash on Delivery (COD)</h4>
-                      <p className="text-[10px] text-neutral-400 mt-0.5">Pay via Cash or UPI at your doorstep upon receipt.</p>
+                      <p className="text-[10px] text-neutral-400 mt-0.5">Pay with cash when your order is delivered to your door.</p>
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <span className="text-[9px] font-bold text-green-600">✓ FREE Shipping</span>
+                        <span className="text-neutral-300 text-[9px]">•</span>
+                        <span className="text-[9px] font-bold text-green-600">✓ No Hidden Charges</span>
+                        <span className="text-neutral-300 text-[9px]">•</span>
+                        <span className="text-[9px] font-bold text-green-600">✓ Pay on Delivery</span>
+                      </div>
                     </div>
                   </div>
-                  <span className="font-bold text-xs text-neutral-800">₹40</span>
+                  <div className="text-right shrink-0">
+                    <span className="text-[10px] text-neutral-400 font-medium">You Pay</span>
+                    <p className="font-bold text-base text-neutral-900">₹{subTotal.toLocaleString()}</p>
+                  </div>
                 </label>
 
                 {/* Online Payment option */}
                 <label 
                   onClick={() => setPaymentMethod("upi")}
                   className={cn(
-                    "flex items-center justify-between p-5 border-2 rounded-2xl bg-white cursor-pointer transition-all",
+                    "flex items-start justify-between p-5 border-2 rounded-2xl cursor-pointer transition-all gap-4",
                     paymentMethod === "upi" 
-                      ? "border-brand-ink ring-1 ring-brand-ink" 
-                      : "border-neutral-100 hover:border-brand-rosegold/30"
+                      ? "border-brand-ink ring-1 ring-brand-ink bg-neutral-50/50" 
+                      : "border-neutral-100 hover:border-neutral-300 bg-white"
                   )}
                 >
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-start space-x-4">
                     <div className={cn(
-                      "w-4 h-4 rounded-full border-4 flex items-center justify-center",
+                      "w-4 h-4 rounded-full border-4 mt-0.5 shrink-0 transition-all",
                       paymentMethod === "upi" ? "border-brand-ink" : "border-neutral-300"
                     )} />
                     <div>
-                      <h4 className="font-bold text-xs text-neutral-800">Pay Online (UPI, Cards, Netbanking)</h4>
-                      <p className="text-[10px] text-neutral-400 mt-0.5">Pay securely via Razorpay gateway.</p>
+                      <h4 className="font-bold text-xs text-neutral-800">Pay Online (UPI / Cards / Netbanking)</h4>
+                      <p className="text-[10px] text-neutral-400 mt-0.5">Pay via UPI, PhonePe, GPay, Credit/Debit Cards or Wallets.</p>
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <span className="text-[9px] font-bold text-green-600">✓ FREE Shipping</span>
+                        <span className="text-neutral-300 text-[9px]">•</span>
+                        <span className="text-[9px] font-bold text-green-600">✓ 100% Secure</span>
+                        <span className="text-neutral-300 text-[9px]">•</span>
+                        <span className="text-[9px] font-bold text-green-600">✓ Instant Confirmation</span>
+                      </div>
                     </div>
                   </div>
-                  <span className="font-bold text-xs text-brand-rosegold bg-brand-rosegold/5 px-2 py-0.5 rounded uppercase tracking-wider text-[8px]">10% Off</span>
+                  <div className="text-right shrink-0">
+                    <span className="text-[10px] text-neutral-400 font-medium">You Pay</span>
+                    <p className="font-bold text-base text-neutral-900">₹{subTotal.toLocaleString()}</p>
+                  </div>
                 </label>
 
-                {/* Razorpay Online Payment Info */}
-                {paymentMethod === "upi" && (
-                  <div className="p-5 bg-brand-cream/30 rounded-2xl border border-brand-blush/40 space-y-2.5 animate-fadeIn text-xs">
-                    <span className="text-[9px] uppercase tracking-wider text-brand-rosegold font-bold block">Secure Razorpay Gateway</span>
-                    <p className="text-neutral-500 font-light leading-relaxed">
-                      You can pay using **UPI (PhonePe, GPay, Paytm)**, **Credit/Debit Cards**, **Net Banking**, or **Wallets**. 
-                    </p>
-                    <p className="text-[10px] text-neutral-600 font-semibold flex items-center gap-1.5 pt-1">
-                      ✨ A **10% discount** is applied to your order automatically.
-                    </p>
-                  </div>
-                )}
               </div>
 
               <div className="flex gap-4">
@@ -639,17 +746,9 @@ export default function Checkout() {
                   <span className="text-neutral-400 uppercase tracking-widest font-bold text-[9px]">Subtotal</span>
                   <span className="font-bold text-neutral-900">₹{subTotal.toLocaleString()}</span>
                 </div>
-                {discount > 0 && (
-                  <div className="flex justify-between text-xs animate-fadeIn">
-                    <span className="text-neutral-400 uppercase tracking-widest font-bold text-[9px]">UPI Discount (10% Off)</span>
-                    <span className="text-green-600 font-bold">-₹{discount.toLocaleString()}</span>
-                  </div>
-                )}
                 <div className="flex justify-between text-xs">
                   <span className="text-neutral-400 uppercase tracking-widest font-bold text-[9px]">Shipping</span>
-                  <span className="text-brand-rosegold font-bold uppercase text-[9px] tracking-wider">
-                    {shipping === 0 ? "Free" : `₹${shipping.toLocaleString()}`}
-                  </span>
+                  <span className="text-green-600 font-bold uppercase text-[9px] tracking-wider">FREE</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold font-serif pt-4 border-t border-black/5">
                   <span>Total</span>
@@ -674,10 +773,12 @@ interface InputProps {
   type?: string;
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
   required?: boolean;
+  error?: string;
 }
 
-function Input({ label, placeholder, type = "text", value, onChange, required }: InputProps) {
+function Input({ label, placeholder, type = "text", value, onChange, onBlur, required, error }: InputProps) {
   return (
     <div className="space-y-1.5 text-xs text-neutral-600">
       <label className="text-[9px] uppercase tracking-widest font-bold text-neutral-400">{label}</label>
@@ -686,9 +787,20 @@ function Input({ label, placeholder, type = "text", value, onChange, required }:
         placeholder={placeholder}
         value={value}
         onChange={onChange}
+        onBlur={onBlur}
         required={required}
-        className="w-full bg-white border border-brand-blush rounded-xl px-4 py-3 text-xs focus:border-brand-ink outline-none transition-colors font-medium hover:border-brand-rosegold/50"
+        className={cn(
+          "w-full bg-white border rounded-xl px-4 py-3 text-xs outline-none transition-all font-medium",
+          error
+            ? "border-red-400 ring-1 ring-red-300 focus:border-red-500 focus:ring-red-400"
+            : "border-brand-blush hover:border-brand-rosegold/50 focus:border-brand-ink"
+        )}
       />
+      {error && (
+        <p className="text-[10px] text-red-500 font-medium flex items-center gap-1 mt-1">
+          <span>⚠</span> {error}
+        </p>
+      )}
     </div>
   );
 }

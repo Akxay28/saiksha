@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, Star, ShoppingBag, X, Trash2 } from "lucide-react";
+import { Eye, Heart, ShoppingBag, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Product } from "../../types";
 import { cn } from "../../lib/utils";
@@ -229,6 +229,12 @@ export default function ProductCard({ product, className }: ProductCardProps) {
         <p className="text-[10px] uppercase tracking-widest text-neutral-400 font-bold">
           {product.category}
         </p>
+        {(product.views || 0) > 0 && (
+          <div className="flex items-center gap-1.5 text-[10px] text-neutral-400">
+            <Eye size={12} className="text-[#a2855b]" />
+            <span>{product.views?.toLocaleString()} viewed this piece</span>
+          </div>
+        )}
       </div>
     </motion.div>
   );

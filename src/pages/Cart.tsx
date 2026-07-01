@@ -125,7 +125,7 @@ export default function Cart() {
 
                   <button 
                     onClick={() => removeFromCart(item.id)}
-                    className="flex items-center space-x-2 text-neutral-300 hover:text-red-400 transition-colors py-2"
+                    className="flex items-center space-x-2 text-red-500 hover:text-red-700 transition-colors py-2 cursor-pointer"
                   >
                     <Trash2 size={16} />
                     <span className="text-[10px] uppercase tracking-widest font-bold">Remove</span>

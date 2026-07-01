@@ -26,6 +26,7 @@ export interface IProduct {
   packaging?: string;
   shippingRoute?: string;
   exchangePolicy?: string;
+  views?: number;
   updatedAt?: Date;
 }
 
@@ -55,7 +56,8 @@ const ProductSchema: Schema = new Schema(
     careInstructions: { type: [String] },
     packaging: { type: String },
     shippingRoute: { type: String },
-    exchangePolicy: { type: String }
+    exchangePolicy: { type: String },
+    views: { type: Number, default: 0 }
   },
   {
     timestamps: true,
