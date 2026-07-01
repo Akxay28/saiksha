@@ -8,10 +8,12 @@ import {
   LogOut, 
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
   TrendingUp, 
   AlertTriangle, 
   Database,
   Eye,
+  Search,
   ShoppingBag,
   MessageSquare,
   Clock,
@@ -24,7 +26,10 @@ import {
   Star,
   CheckCircle2,
   Activity,
-  Users
+  Users,
+  Home,
+  Package,
+  UserRoundCheck
 } from "lucide-react";
 import { useProducts } from "../context/ProductContext";
 import { Product } from "../types";
@@ -37,6 +42,19 @@ interface AdminDashboardProps {
   onClose: () => void;
 }
 
+interface AdminCustomer {
+  key: string;
+  name: string;
+  email: string;
+  phone: string;
+  city: string;
+  totalOrders: number;
+  totalSpent: number;
+  cartLeads: number;
+  lastActivity: string;
+  source: "Customer" | "Lead";
+}
+
 export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const { products, addProduct, updateProduct, deleteProduct } = useProducts();
   const { activeVisitors, totalVisitors } = useLiveVisitors({ countAsVisitor: false });
@@ -47,22 +65,37 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<"products" | "orders" | "cartLeads" | "testimonials">("products");
+  const [activeTab, setActiveTab] = useState<"overview" | "products" | "orders" | "customers" | "cartLeads" | "testimonials">("overview");
 
   // Orders State
   const [orders, setOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [orderSearch, setOrderSearch] = useState("");
   const [ordersPerPage, setOrdersPerPage] = useState(10);
   const [currentOrderPage, setCurrentOrderPage] = useState(1);
+
+  // Customer list controls
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customersPerPage, setCustomersPerPage] = useState(10);
+  const [currentCustomerPage, setCurrentCustomerPage] = useState(1);
+
+  // Product list controls
+  const [productSearch, setProductSearch] = useState("");
+  const [productsPerPage, setProductsPerPage] = useState(10);
+  const [currentProductPage, setCurrentProductPage] = useState(1);
 
   // Saved Cart Leads State
   const [cartLeads, setCartLeads] = useState<any[]>([]);
   const [loadingCartLeads, setLoadingCartLeads] = useState(false);
+  const [cartLeadsPerPage, setCartLeadsPerPage] = useState(10);
+  const [currentCartLeadPage, setCurrentCartLeadPage] = useState(1);
 
   // Testimonials State
   const [testimonials, setTestimonials] = useState<any[]>([]);
   const [loadingTestimonials, setLoadingTestimonials] = useState(false);
+  const [testimonialsPerPage, setTestimonialsPerPage] = useState(9);
+  const [currentTestimonialPage, setCurrentTestimonialPage] = useState(1);
 
   // CRUD & Modal State for Products
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -481,6 +514,228 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const totalReviewsCount = testimonials.length;
   const totalProductViews = products.reduce((total, product) => total + (product.views || 0), 0);
   const openCartLeadsCount = cartLeads.filter((lead) => lead.status !== "Converted").length;
+  const lowStockProducts = products
+    .filter((product) => product.stock <= 5)
+    .slice(0, 5);
+  const recentOrders = orders.slice(0, 5);
+  const recentCartLeads = cartLeads.slice(0, 4);
+  const customers: AdminCustomer[] = Array.from(
+    [...orders, ...cartLeads].reduce<Map<string, AdminCustomer>>((map, record) => {
+      const isOrder = !!record.orderId;
+      const customer = record.customer || {};
+      const email = String(customer.email || "").trim().toLowerCase();
+      const phone = String(customer.phone || "").trim();
+      const key = email || phone;
+      if (!key) return map;
+
+      const existing: AdminCustomer = map.get(key) || {
+        key,
+        name: "",
+        email: "",
+        phone: "",
+        city: "",
+        totalOrders: 0,
+        totalSpent: 0,
+        cartLeads: 0,
+        lastActivity: "",
+        source: "Lead"
+      };
+
+      const fullName = isOrder
+        ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim()
+        : customer.name || "";
+
+      existing.name = existing.name || fullName || "Unnamed customer";
+      existing.email = existing.email || email;
+      existing.phone = existing.phone || phone;
+      existing.city = existing.city || customer.city || "";
+      existing.lastActivity = [existing.lastActivity, record.updatedAt || record.createdAt]
+        .filter(Boolean)
+        .sort()
+        .at(-1) || "";
+
+      if (isOrder) {
+        existing.totalOrders += 1;
+        existing.totalSpent += Number(record.total || 0);
+        existing.source = "Customer";
+      } else {
+        existing.cartLeads += 1;
+      }
+
+      map.set(key, existing);
+      return map;
+    }, new Map<string, any>()).values()
+  ).sort((a, b) => String(b.lastActivity).localeCompare(String(a.lastActivity)));
+  const filteredCustomers = customers.filter((customer) => {
+    const query = customerSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [customer.name, customer.email, customer.phone, customer.city, customer.source]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  });
+  const paginatedCustomers = filteredCustomers.slice(
+    (currentCustomerPage - 1) * customersPerPage,
+    currentCustomerPage * customersPerPage
+  );
+  const adminNavItems = [
+    { id: "overview" as const, label: "Home", count: null, icon: Home },
+    { id: "products" as const, label: "Products", count: totalProducts, icon: Package },
+    { id: "orders" as const, label: "Orders", count: orders.length, icon: ShoppingBag },
+    { id: "customers" as const, label: "Customers", count: customers.length, icon: Users },
+    { id: "cartLeads" as const, label: "Cart Leads", count: openCartLeadsCount, icon: UserRoundCheck },
+    { id: "testimonials" as const, label: "Testimonials", count: totalReviewsCount, icon: MessageSquare }
+  ];
+  const filteredProducts = products.filter((product) =>
+    product.name.toLowerCase().includes(productSearch.trim().toLowerCase())
+  );
+  const filteredOrders = orders.filter((order) => {
+    const query = orderSearch.trim().toLowerCase();
+    if (!query) return true;
+
+    const searchable = [
+      order.orderId,
+      order.customer?.firstName,
+      order.customer?.lastName,
+      order.customer?.email,
+      order.customer?.phone,
+      order.customer?.city,
+      order.status,
+      ...(order.items || []).map((item: any) => item.name)
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return searchable.includes(query);
+  });
+  const paginatedProducts = filteredProducts.slice(
+    (currentProductPage - 1) * productsPerPage,
+    currentProductPage * productsPerPage
+  );
+  const paginatedOrders = filteredOrders.slice(
+    (currentOrderPage - 1) * ordersPerPage,
+    currentOrderPage * ordersPerPage
+  );
+  const paginatedCartLeads = cartLeads.slice(
+    (currentCartLeadPage - 1) * cartLeadsPerPage,
+    currentCartLeadPage * cartLeadsPerPage
+  );
+  const paginatedTestimonials = testimonials.slice(
+    (currentTestimonialPage - 1) * testimonialsPerPage,
+    currentTestimonialPage * testimonialsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentProductPage(1);
+  }, [productSearch, productsPerPage]);
+
+  useEffect(() => {
+    setCurrentOrderPage(1);
+  }, [orderSearch, ordersPerPage]);
+
+  useEffect(() => {
+    setCurrentCustomerPage(1);
+  }, [customerSearch, customersPerPage]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filteredProducts.length / productsPerPage));
+    if (currentProductPage > totalPages) setCurrentProductPage(totalPages);
+  }, [currentProductPage, filteredProducts.length, productsPerPage]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filteredOrders.length / ordersPerPage));
+    if (currentOrderPage > totalPages) setCurrentOrderPage(totalPages);
+  }, [currentOrderPage, filteredOrders.length, ordersPerPage]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / customersPerPage));
+    if (currentCustomerPage > totalPages) setCurrentCustomerPage(totalPages);
+  }, [currentCustomerPage, filteredCustomers.length, customersPerPage]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(cartLeads.length / cartLeadsPerPage));
+    if (currentCartLeadPage > totalPages) setCurrentCartLeadPage(totalPages);
+  }, [cartLeads.length, cartLeadsPerPage, currentCartLeadPage]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(testimonials.length / testimonialsPerPage));
+    if (currentTestimonialPage > totalPages) setCurrentTestimonialPage(totalPages);
+  }, [testimonials.length, testimonialsPerPage, currentTestimonialPage]);
+
+  const renderPagination = (
+    totalItems: number,
+    currentPage: number,
+    perPage: number,
+    setCurrentPage: React.Dispatch<React.SetStateAction<number>>,
+    setPerPage: React.Dispatch<React.SetStateAction<number>>,
+    label: string,
+    options: number[] = [10, 20, 30, 50]
+  ) => {
+    if (totalItems === 0) return null;
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+    const start = (currentPage - 1) * perPage + 1;
+    const end = Math.min(currentPage * perPage, totalItems);
+    const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
+
+    return (
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white px-5 py-3 border-t border-neutral-100">
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] uppercase tracking-wider text-neutral-400 font-bold">Show</span>
+          <select
+            value={perPage}
+            onChange={(e) => {
+              setPerPage(Number(e.target.value));
+              setCurrentPage(1);
+            }}
+            className="text-[10px] font-bold text-neutral-700 border border-neutral-200 rounded-lg px-3 py-1.5 bg-neutral-50 focus:outline-none focus:ring-1 focus:ring-brand-rosegold cursor-pointer"
+          >
+            {options.map((value) => (
+              <option key={value} value={value}>{value}</option>
+            ))}
+          </select>
+          <span className="text-[10px] text-neutral-400 font-mono">
+            Showing {start}-{end} of {totalItems} {label}
+          </span>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 rounded-lg border border-neutral-200 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            {pages.map((page) => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={cn(
+                  "min-w-[32px] h-8 px-2 rounded-lg text-[10px] font-bold border transition-all",
+                  currentPage === page
+                    ? "bg-brand-ink text-white border-brand-ink"
+                    : "bg-white text-neutral-500 border-neutral-200 hover:bg-neutral-50 hover:text-neutral-800"
+                )}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={currentPage === totalPages}
+              className="p-1.5 rounded-lg border border-neutral-200 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (isCheckingSession) {
     return (
@@ -558,57 +813,105 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
 
   // DASHBOARD WORKSPACE
   return (
-    <div className="min-h-screen bg-[#faf9f6] text-neutral-800 font-sans pb-20">
-      
-      {/* Top Console Bar */}
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-neutral-100 py-4 px-6 md:px-12 flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <button 
-            onClick={onClose}
-            className="p-2 hover:bg-neutral-50 rounded-full text-neutral-400 hover:text-neutral-800 transition-colors flex items-center space-x-1"
-            title="Return to Storefront"
-          >
-            <ChevronLeft size={16} />
-            <span className="text-[9px] uppercase font-bold tracking-widest hidden md:inline">Store</span>
-          </button>
-          <div className="h-6 w-px bg-neutral-200" />
-          <div className="flex items-center space-x-2.5">
-            <div className="h-9 w-9 rounded-full bg-white ring-1 ring-brand-rosegold/20 shadow-sm flex items-center justify-center shrink-0">
-              <img src={logoImg} alt="Saiksha Logo" className="h-8 w-8 rounded-full object-cover" referrerPolicy="no-referrer" />
-            </div>
-            <div>
-              <span className="font-serif text-sm font-bold tracking-widest text-neutral-900 uppercase">SAIKSHA</span>
-              <span className="text-[8px] bg-brand-rosegold/10 text-brand-rosegold font-bold uppercase px-2 py-0.5 rounded-full ml-2">Atlas Admin</span>
+    <div className="min-h-screen bg-[#f6f6f3] text-neutral-800 font-sans">
+      <div className="flex min-h-screen">
+        <aside className="hidden lg:flex w-72 shrink-0 flex-col border-r border-neutral-200 bg-[#202123] text-white">
+          <div className="p-5 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-white flex items-center justify-center overflow-hidden">
+                <img src={logoImg} alt="Saiksha Logo" className="h-9 w-9 rounded-full object-cover" referrerPolicy="no-referrer" />
+              </div>
+              <div>
+                <p className="font-serif text-sm tracking-[3px] uppercase font-bold">Saiksha</p>
+                <p className="text-[10px] text-white/45">Commerce admin</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="flex items-center space-x-4">
-          {activeTab === "products" && (
+          <nav className="flex-1 p-3 space-y-1">
+            {adminNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={cn(
+                    "w-full flex items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors cursor-pointer",
+                    isActive ? "bg-white text-neutral-950 shadow-sm" : "text-white/75 hover:bg-white/10 hover:text-white"
+                  )}
+                >
+                  <span className="flex items-center gap-3">
+                    <Icon size={17} />
+                    <span className="font-medium">{item.label}</span>
+                  </span>
+                  {item.count !== null && (
+                    <span className={cn("text-[10px] rounded-full px-2 py-0.5", isActive ? "bg-neutral-100 text-neutral-600" : "bg-white/10 text-white/60")}>
+                      {item.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="p-3 border-t border-white/10 space-y-2">
             <button
-              onClick={openAddModal}
-              className="bg-brand-ink text-white px-4 py-2.5 rounded-lg text-[9px] uppercase tracking-widest font-bold hover:bg-neutral-800 transition-all flex items-center space-x-1.5 shadow-md shadow-brand-ink/5 cursor-pointer"
+              onClick={onClose}
+              className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
             >
-              <Plus size={13} />
-              <span>Add Jewelry</span>
+              <ChevronLeft size={16} />
+              <span>View storefront</span>
             </button>
-          )}
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-red-200 hover:bg-red-500/15 hover:text-red-100 transition-colors cursor-pointer"
+            >
+              <LogOut size={16} />
+              <span>Log out</span>
+            </button>
+          </div>
+        </aside>
 
-          <button
-            onClick={handleLogout}
-            className="p-2 hover:bg-red-50 rounded-lg text-neutral-400 hover:text-red-500 transition-colors cursor-pointer"
-            title="Logout Admin"
-          >
-            <LogOut size={16} />
-          </button>
-        </div>
-      </header>
+        <div className="min-w-0 flex-1">
+          <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-neutral-200 px-5 md:px-8 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-[2px] text-neutral-400 font-bold">Saiksha Admin</p>
+              <h1 className="text-xl font-serif font-bold text-neutral-950">
+                {adminNavItems.find((item) => item.id === activeTab)?.label || "Home"}
+              </h1>
+            </div>
 
-      {/* Main Console Workspace */}
-      <main className="max-w-7xl mx-auto px-6 md:px-12 pt-8 space-y-8">
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:flex items-center gap-2 rounded-lg bg-neutral-50 border border-neutral-200 px-3 py-2 text-xs text-neutral-500">
+                <Activity size={14} className="text-green-600" />
+                <span>{activeVisitors > 0 ? `${activeVisitors} active now` : "No live visitors"}</span>
+              </div>
+              {activeTab === "products" && (
+                <button
+                  onClick={openAddModal}
+                  className="bg-brand-ink text-white px-4 py-2.5 rounded-lg text-[9px] uppercase tracking-widest font-bold hover:bg-neutral-800 transition-all flex items-center space-x-1.5 shadow-md shadow-brand-ink/5 cursor-pointer"
+                >
+                  <Plus size={13} />
+                  <span>Add Product</span>
+                </button>
+              )}
+              <button
+                onClick={handleLogout}
+                className="lg:hidden p-2 hover:bg-red-50 rounded-lg text-neutral-400 hover:text-red-500 transition-colors cursor-pointer"
+                title="Logout Admin"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          </header>
+
+          <main className="px-5 md:px-8 py-8 space-y-8">
         
+        {activeTab === "overview" && (
+          <section className="space-y-6">
         {/* Stats Grid */}
-        <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
           {/* Total Catalog Stats Card */}
           <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
             <div className="space-y-1">
@@ -634,11 +937,11 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
           {/* Customer Reviews Stats Card */}
           <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[9px] uppercase tracking-widest text-neutral-400 font-bold">Total Testimonials</span>
-              <h3 className="text-3xl font-serif font-bold text-neutral-900">{totalReviewsCount} Reviews</h3>
+              <span className="text-[9px] uppercase tracking-widest text-neutral-400 font-bold">Customers</span>
+              <h3 className="text-3xl font-serif font-bold text-neutral-900">{customers.length}</h3>
             </div>
             <div className="p-4 bg-neutral-50 rounded-2xl text-neutral-500">
-              <MessageSquare size={24} />
+              <Users size={24} />
             </div>
           </div>
 
@@ -668,65 +971,126 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
               <Activity size={24} />
             </div>
           </div>
-        </section>
-
-        {/* Tab Selection Panel */}
-        <div className="border-b border-neutral-200 flex space-x-8">
-          <button
-            onClick={() => setActiveTab("products")}
-            className={cn(
-              "pb-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 cursor-pointer",
-              activeTab === "products"
-                ? "border-brand-ink text-brand-ink font-extrabold"
-                : "border-transparent text-neutral-400 hover:text-neutral-700"
-            )}
-          >
-            Products ({totalProducts})
-          </button>
-          
-          <button
-            onClick={() => setActiveTab("orders")}
-            className={cn(
-              "pb-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 cursor-pointer",
-              activeTab === "orders"
-                ? "border-brand-ink text-brand-ink font-extrabold"
-                : "border-transparent text-neutral-400 hover:text-neutral-700"
-            )}
-          >
-            Orders ({orders.length})
-          </button>
-
-          <button
-            onClick={() => setActiveTab("cartLeads")}
-            className={cn(
-              "pb-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 cursor-pointer",
-              activeTab === "cartLeads"
-                ? "border-brand-ink text-brand-ink font-extrabold"
-                : "border-transparent text-neutral-400 hover:text-neutral-700"
-            )}
-          >
-            Cart Leads ({openCartLeadsCount})
-          </button>
-
-          <button
-            onClick={() => setActiveTab("testimonials")}
-            className={cn(
-              "pb-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 cursor-pointer",
-              activeTab === "testimonials"
-                ? "border-brand-ink text-brand-ink font-extrabold"
-                : "border-transparent text-neutral-400 hover:text-neutral-700"
-            )}
-          >
-            Testimonials ({totalReviewsCount})
-          </button>
         </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="xl:col-span-2 bg-white rounded-2xl border border-neutral-100 shadow-xs overflow-hidden">
+            <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-serif font-bold text-neutral-950">Recent Orders</h3>
+                <p className="text-[10px] text-neutral-400">Latest checkout activity</p>
+              </div>
+              <button onClick={() => setActiveTab("orders")} className="text-[10px] uppercase tracking-widest font-bold text-[#a2855b] cursor-pointer">View all</button>
+            </div>
+            <div className="divide-y divide-neutral-50">
+              {recentOrders.length === 0 ? (
+                <div className="p-6 text-sm text-neutral-400">No orders yet.</div>
+              ) : recentOrders.map((order) => (
+                <button
+                  key={order.orderId}
+                  onClick={() => {
+                    setActiveTab("orders");
+                    setExpandedOrderId(order.orderId);
+                  }}
+                  className="w-full p-5 flex items-center justify-between gap-4 hover:bg-neutral-50 text-left cursor-pointer"
+                >
+                  <div className="min-w-0">
+                    <p className="font-mono text-xs font-bold text-neutral-950">{order.orderId}</p>
+                    <p className="text-xs text-neutral-500 truncate">{order.customer?.firstName} {order.customer?.lastName} · {order.items?.length || 0} items</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-neutral-950">Rs {Number(order.total || 0).toLocaleString()}</p>
+                    <p className="text-[10px] text-neutral-400">{order.status}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-neutral-100 shadow-xs overflow-hidden">
+            <div className="px-6 py-4 border-b border-neutral-100">
+              <h3 className="font-serif font-bold text-neutral-950">Quick Actions</h3>
+              <p className="text-[10px] text-neutral-400">Common store tasks</p>
+            </div>
+            <div className="p-4 space-y-2">
+              <button onClick={openAddModal} className="w-full flex items-center gap-3 rounded-xl border border-neutral-100 p-3 text-left hover:bg-neutral-50 cursor-pointer">
+                <Plus size={16} className="text-[#a2855b]" />
+                <span className="text-xs font-bold">Add product</span>
+              </button>
+              <button onClick={() => setActiveTab("cartLeads")} className="w-full flex items-center gap-3 rounded-xl border border-neutral-100 p-3 text-left hover:bg-neutral-50 cursor-pointer">
+                <UserRoundCheck size={16} className="text-[#a2855b]" />
+                <span className="text-xs font-bold">Review cart leads</span>
+              </button>
+              <button onClick={fetchOrders} className="w-full flex items-center gap-3 rounded-xl border border-neutral-100 p-3 text-left hover:bg-neutral-50 cursor-pointer">
+                <RefreshCw size={16} className="text-[#a2855b]" />
+                <span className="text-xs font-bold">Refresh orders</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-neutral-100 shadow-xs overflow-hidden">
+            <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-serif font-bold text-neutral-950">Low Stock</h3>
+                <p className="text-[10px] text-neutral-400">Needs attention</p>
+              </div>
+              <AlertTriangle size={16} className="text-amber-500" />
+            </div>
+            <div className="divide-y divide-neutral-50">
+              {lowStockProducts.length === 0 ? (
+                <div className="p-5 text-xs text-neutral-400">No low-stock items.</div>
+              ) : lowStockProducts.map((product) => (
+                <div key={product.id} className="p-4 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-neutral-900 truncate">{product.name}</p>
+                    <p className="text-[10px] text-neutral-400">{product.category}</p>
+                  </div>
+                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-full px-2 py-1">{product.stock} left</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="xl:col-span-2 bg-white rounded-2xl border border-neutral-100 shadow-xs overflow-hidden">
+            <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-serif font-bold text-neutral-950">Saved Bag Leads</h3>
+                <p className="text-[10px] text-neutral-400">Customers who may need follow-up</p>
+              </div>
+              <button onClick={() => setActiveTab("cartLeads")} className="text-[10px] uppercase tracking-widest font-bold text-[#a2855b] cursor-pointer">View all</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+              {recentCartLeads.length === 0 ? (
+                <div className="text-sm text-neutral-400">No saved bags yet.</div>
+              ) : recentCartLeads.map((lead) => (
+                <div key={lead._id || lead.sessionId} className="rounded-xl border border-neutral-100 p-4">
+                  <p className="text-xs font-bold text-neutral-950">{lead.customer?.name}</p>
+                  <p className="text-[10px] text-neutral-400">{lead.customer?.phone} · Rs {Number(lead.total || 0).toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+          </section>
+        )}
 
         {/* TAB VIEW 1: PRODUCTS CATALOG LIST */}
         {activeTab === "products" && (
           <section className="bg-white rounded-2xl border border-neutral-100 shadow-xs overflow-hidden">
-            <div className="p-6 border-b border-neutral-100 flex items-center justify-between bg-neutral-50/20">
-              <h4 className="font-serif text-base font-bold text-neutral-900">Database Catalog Listing</h4>
-              <span className="text-[9px] text-neutral-400 tracking-wider font-mono">Collection Name: products</span>
+            <div className="p-6 border-b border-neutral-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-neutral-50/20">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">Database Catalog Listing</h4>
+                <span className="text-[9px] text-neutral-400 tracking-wider font-mono">Collection Name: products</span>
+              </div>
+              <div className="relative w-full lg:w-80">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                <input
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  placeholder="Search product title"
+                  className="w-full rounded-lg border border-neutral-200 bg-white pl-9 pr-3 py-2.5 text-xs outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                />
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -744,7 +1108,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-50 text-xs">
-                  {products.map((product) => (
+                  {paginatedProducts.map((product) => (
                     <tr key={product.id} className="hover:bg-neutral-50/30 transition-colors">
                       <td className="py-4 px-6">
                         <div className="w-10 h-12 rounded overflow-hidden bg-neutral-100 border border-neutral-100">
@@ -820,23 +1184,48 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                 </tbody>
               </table>
             </div>
+            {filteredProducts.length === 0 ? (
+              <div className="px-6 py-12 text-center text-xs text-neutral-400">
+                No products matched "{productSearch}".
+              </div>
+            ) : (
+              renderPagination(
+                filteredProducts.length,
+                currentProductPage,
+                productsPerPage,
+                setCurrentProductPage,
+                setProductsPerPage,
+                "products"
+              )
+            )}
           </section>
         )}
 
         {/* TAB VIEW 2: ORDERS MANAGER */}
         {activeTab === "orders" && (
           <section className="space-y-6">
-            <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
+            <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div>
                 <h4 className="font-serif text-base font-bold text-neutral-900">Fulfillment Center</h4>
                 <p className="text-[10px] text-neutral-450 mt-0.5">Manage customer purchases and update order statuses.</p>
               </div>
-              <button 
-                onClick={fetchOrders}
-                className="text-[9px] uppercase font-bold tracking-widest text-[#a2855b] hover:text-[#7a603c]"
-              >
-                Refresh Data
-              </button>
+              <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+                <div className="relative w-full lg:w-96">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                  <input
+                    value={orderSearch}
+                    onChange={(e) => setOrderSearch(e.target.value)}
+                    placeholder="Search order, customer, phone, email, product"
+                    className="w-full rounded-lg border border-neutral-200 bg-white pl-9 pr-3 py-2.5 text-xs outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                  />
+                </div>
+                <button 
+                  onClick={fetchOrders}
+                  className="text-[9px] uppercase font-bold tracking-widest text-[#a2855b] hover:text-[#7a603c] whitespace-nowrap"
+                >
+                  Refresh Data
+                </button>
+              </div>
             </div>
 
             {loadingOrders ? (
@@ -846,6 +1235,12 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                 <ShoppingBag size={40} className="mx-auto text-neutral-300" />
                 <h4 className="font-serif text-sm font-bold text-neutral-500">No Orders Placed Yet</h4>
                 <p className="text-[10px] text-neutral-400 font-light">Customer checkout submissions will register here.</p>
+              </div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="text-center py-20 bg-white rounded-2xl border border-black/5 text-neutral-400 space-y-4">
+                <ShoppingBag size={40} className="mx-auto text-neutral-300" />
+                <h4 className="font-serif text-sm font-bold text-neutral-500">No Matching Orders</h4>
+                <p className="text-[10px] text-neutral-400 font-light">Try searching by order ID, customer details, status, or product name.</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -862,24 +1257,22 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                       className="text-[10px] font-bold text-neutral-700 border border-neutral-200 rounded-lg px-3 py-1.5 bg-neutral-50 focus:outline-none focus:ring-1 focus:ring-brand-rosegold cursor-pointer"
                     >
                       {/* Only show page-size options smaller than total orders */}
-                      {[10, 20, 30, 50, 100, 200].filter(n => n < orders.length).map((n) => (
+                      {[10, 20, 30, 50, 100, 200].filter(n => n < filteredOrders.length).map((n) => (
                         <option key={n} value={n}>Show {n}</option>
                       ))}
                       {/* Always show a single "Show All" at the end */}
-                      <option value={orders.length}>Show All ({orders.length})</option>
+                      <option value={filteredOrders.length}>Show All ({filteredOrders.length})</option>
                     </select>
                   </div>
                   <span className="text-[10px] text-neutral-400 font-mono">
-                    {ordersPerPage >= orders.length
-                      ? `Showing all ${orders.length} orders`
-                      : `Showing ${(currentOrderPage - 1) * ordersPerPage + 1}–${Math.min(currentOrderPage * ordersPerPage, orders.length)} of ${orders.length} orders`}
+                    {ordersPerPage >= filteredOrders.length
+                      ? `Showing all ${filteredOrders.length} orders`
+                      : `Showing ${(currentOrderPage - 1) * ordersPerPage + 1}–${Math.min(currentOrderPage * ordersPerPage, filteredOrders.length)} of ${filteredOrders.length} orders`}
                   </span>
                 </div>
 
                 {/* ── Orders list (current page slice) ── */}
-                {orders
-                  .slice((currentOrderPage - 1) * ordersPerPage, currentOrderPage * ordersPerPage)
-                  .map((order) => {
+                {paginatedOrders.map((order) => {
                     const isExpanded = expandedOrderId === order.orderId;
                     const dateString = order.createdAt 
                       ? new Date(order.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
@@ -1037,7 +1430,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
 
                 {/* ── Pagination bar ── */}
                 {(() => {
-                  const totalPages = Math.ceil(orders.length / ordersPerPage);
+                  const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
                   if (totalPages <= 1) return null;
                   const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
                   return (
@@ -1088,7 +1481,107 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
           </section>
         )}
 
-        {/* TAB VIEW 3: SAVED / ABANDONED CART LEADS */}
+        {/* TAB VIEW 3: CUSTOMERS */}
+        {activeTab === "customers" && (
+          <section className="bg-white rounded-2xl border border-neutral-100 shadow-xs overflow-hidden">
+            <div className="p-6 border-b border-neutral-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-neutral-50/20">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">Customers</h4>
+                <p className="text-[10px] text-neutral-450 mt-0.5">Unified customer profiles from orders and saved bag leads.</p>
+              </div>
+              <div className="relative w-full lg:w-96">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                <input
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  placeholder="Search name, email, phone, city"
+                  className="w-full rounded-lg border border-neutral-200 bg-white pl-9 pr-3 py-2.5 text-xs outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                />
+              </div>
+            </div>
+
+            {customers.length === 0 ? (
+              <div className="p-12 text-center text-neutral-400">
+                <Users size={40} className="mx-auto text-neutral-300 mb-4" />
+                <h4 className="font-serif text-sm font-bold text-neutral-500">No Customers Yet</h4>
+                <p className="text-[10px] text-neutral-400 font-light mt-1">Customers will appear after orders or saved bag leads.</p>
+              </div>
+            ) : filteredCustomers.length === 0 ? (
+              <div className="p-12 text-center text-xs text-neutral-400">
+                No customers matched "{customerSearch}".
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left">
+                    <thead>
+                      <tr className="bg-neutral-50/70 border-b border-neutral-100 text-[9px] uppercase tracking-widest text-neutral-400 font-bold">
+                        <th className="py-4 px-6">Customer</th>
+                        <th className="py-4 px-6">Contact</th>
+                        <th className="py-4 px-6">Orders</th>
+                        <th className="py-4 px-6">Spent</th>
+                        <th className="py-4 px-6">Cart Leads</th>
+                        <th className="py-4 px-6">Last Activity</th>
+                        <th className="py-4 px-6 text-right">Type</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-50 text-xs">
+                      {paginatedCustomers.map((customer) => (
+                        <tr key={customer.key} className="hover:bg-neutral-50/30 transition-colors">
+                          <td className="py-4 px-6">
+                            <div className="flex items-center gap-3">
+                              <div className="h-9 w-9 rounded-full bg-brand-rosegold/10 text-brand-rosegold flex items-center justify-center text-[11px] font-bold uppercase">
+                                {(customer.name || customer.email || "?")[0]}
+                              </div>
+                              <div>
+                                <p className="font-bold text-neutral-950">{customer.name}</p>
+                                {customer.city && <p className="text-[10px] text-neutral-400">{customer.city}</p>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 px-6 text-neutral-500">
+                            <div className="space-y-1">
+                              {customer.email && <p className="flex items-center gap-1.5"><Mail size={12} /> {customer.email}</p>}
+                              {customer.phone && <p className="flex items-center gap-1.5"><Phone size={12} /> {customer.phone}</p>}
+                            </div>
+                          </td>
+                          <td className="py-4 px-6 font-bold text-neutral-900">{customer.totalOrders}</td>
+                          <td className="py-4 px-6 font-bold text-neutral-900">Rs {customer.totalSpent.toLocaleString()}</td>
+                          <td className="py-4 px-6 text-neutral-600">{customer.cartLeads}</td>
+                          <td className="py-4 px-6 text-neutral-400">
+                            {customer.lastActivity
+                              ? new Date(customer.lastActivity).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+                              : "N/A"}
+                          </td>
+                          <td className="py-4 px-6 text-right">
+                            <span className={cn(
+                              "rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider border",
+                              customer.source === "Customer"
+                                ? "bg-green-50 text-green-700 border-green-100"
+                                : "bg-amber-50 text-amber-700 border-amber-100"
+                            )}>
+                              {customer.source}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {renderPagination(
+                  filteredCustomers.length,
+                  currentCustomerPage,
+                  customersPerPage,
+                  setCurrentCustomerPage,
+                  setCustomersPerPage,
+                  "customers"
+                )}
+              </>
+            )}
+          </section>
+        )}
+
+        {/* TAB VIEW 4: SAVED / ABANDONED CART LEADS */}
         {activeTab === "cartLeads" && (
           <section className="space-y-6">
             <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
@@ -1113,64 +1606,74 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                 No saved bag leads yet.
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                {cartLeads.map((lead) => {
-                  const savedDate = lead.updatedAt
-                    ? new Date(lead.updatedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
-                    : "N/A";
+              <div className="bg-white rounded-2xl border border-neutral-100 overflow-hidden">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 p-5">
+                  {paginatedCartLeads.map((lead) => {
+                    const savedDate = lead.updatedAt
+                      ? new Date(lead.updatedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+                      : "N/A";
 
-                  return (
-                    <div key={lead._id || lead.sessionId} className="bg-white rounded-2xl border border-neutral-100 p-6 shadow-xs space-y-5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-1">
-                          <h5 className="font-serif text-lg font-bold text-neutral-950">{lead.customer?.name}</h5>
-                          <div className="space-y-1 text-xs text-neutral-500">
-                            <p className="flex items-center gap-2">
-                              <Mail size={13} className="text-neutral-400" />
-                              {lead.customer?.email}
-                            </p>
-                            <p className="flex items-center gap-2">
-                              <Phone size={13} className="text-neutral-400" />
-                              {lead.customer?.phone}
-                            </p>
+                    return (
+                      <div key={lead._id || lead.sessionId} className="bg-white rounded-2xl border border-neutral-100 p-6 shadow-xs space-y-5">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-1">
+                            <h5 className="font-serif text-lg font-bold text-neutral-950">{lead.customer?.name}</h5>
+                            <div className="space-y-1 text-xs text-neutral-500">
+                              <p className="flex items-center gap-2">
+                                <Mail size={13} className="text-neutral-400" />
+                                {lead.customer?.email}
+                              </p>
+                              <p className="flex items-center gap-2">
+                                <Phone size={13} className="text-neutral-400" />
+                                {lead.customer?.phone}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-full bg-amber-50 px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-700 border border-amber-100">
+                              {lead.status || "Open"}
+                            </span>
+                            <button
+                              onClick={() => handleDeleteCartLead(lead._id)}
+                              className="p-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors cursor-pointer"
+                              title="Delete Cart Lead"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-full bg-amber-50 px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-700 border border-amber-100">
-                            {lead.status || "Open"}
-                          </span>
-                          <button
-                            onClick={() => handleDeleteCartLead(lead._id)}
-                            className="p-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors cursor-pointer"
-                            title="Delete Cart Lead"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+
+                        <div className="space-y-3">
+                          {(lead.items || []).map((item: any) => (
+                            <div key={`${lead.sessionId}-${item.id}`} className="flex items-center gap-3 rounded-xl bg-neutral-50 p-3">
+                              <div className="h-12 w-10 shrink-0 overflow-hidden rounded bg-white border border-neutral-100">
+                                <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-bold text-neutral-800">{item.name}</p>
+                                <p className="text-[10px] text-neutral-400">Qty {item.quantity}</p>
+                              </div>
+                              <span className="text-xs font-bold text-neutral-900">Rs {Number(item.price || 0).toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex items-center justify-between border-t border-neutral-100 pt-4 text-xs">
+                          <span className="text-neutral-400">Saved {savedDate}</span>
+                          <span className="font-bold text-neutral-950">Total Rs {Number(lead.total || 0).toLocaleString()}</span>
                         </div>
                       </div>
-
-                      <div className="space-y-3">
-                        {(lead.items || []).map((item: any) => (
-                          <div key={`${lead.sessionId}-${item.id}`} className="flex items-center gap-3 rounded-xl bg-neutral-50 p-3">
-                            <div className="h-12 w-10 shrink-0 overflow-hidden rounded bg-white border border-neutral-100">
-                              <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-xs font-bold text-neutral-800">{item.name}</p>
-                              <p className="text-[10px] text-neutral-400">Qty {item.quantity}</p>
-                            </div>
-                            <span className="text-xs font-bold text-neutral-900">Rs {Number(item.price || 0).toLocaleString()}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="flex items-center justify-between border-t border-neutral-100 pt-4 text-xs">
-                        <span className="text-neutral-400">Saved {savedDate}</span>
-                        <span className="font-bold text-neutral-950">Total Rs {Number(lead.total || 0).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+                {renderPagination(
+                  cartLeads.length,
+                  currentCartLeadPage,
+                  cartLeadsPerPage,
+                  setCurrentCartLeadPage,
+                  setCartLeadsPerPage,
+                  "cart leads"
+                )}
               </div>
             )}
           </section>
@@ -1201,68 +1704,81 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                 <p className="text-[10px] text-neutral-400 font-light">Client submissions will list here to approve/remove.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {testimonials.map((testimonial) => (
-                  <div 
-                    key={testimonial._id}
-                    className="bg-white border border-neutral-100 p-6 rounded-2xl shadow-xs relative flex flex-col justify-between"
-                  >
-                    <div className="space-y-4">
-                      {/* Rating & Date */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex text-yellow-400 gap-0.5">
-                          {[...Array(5)].map((_, i) => (
-                            <Star 
-                              key={i} 
-                              size={12} 
-                              className={i < testimonial.rating ? "fill-current text-yellow-400" : "text-neutral-200"} 
-                            />
-                          ))}
+              <div className="bg-white rounded-2xl border border-neutral-100 overflow-hidden">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-5">
+                  {paginatedTestimonials.map((testimonial) => (
+                    <div 
+                      key={testimonial._id}
+                      className="bg-white border border-neutral-100 p-6 rounded-2xl shadow-xs relative flex flex-col justify-between"
+                    >
+                      <div className="space-y-4">
+                        {/* Rating & Date */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex text-yellow-400 gap-0.5">
+                            {[...Array(5)].map((_, i) => (
+                              <Star 
+                                key={i} 
+                                size={12} 
+                                className={i < testimonial.rating ? "fill-current text-yellow-400" : "text-neutral-200"} 
+                              />
+                            ))}
+                          </div>
+                          <span className="text-[10px] text-neutral-400 font-mono">{testimonial.date}</span>
                         </div>
-                        <span className="text-[10px] text-neutral-400 font-mono">{testimonial.date}</span>
+
+                        {/* Review details */}
+                        <div className="space-y-1.5">
+                          <h4 className="font-serif text-xs font-bold text-neutral-900">{testimonial.title}</h4>
+                          <p className="text-[11px] text-neutral-500 font-light leading-relaxed">
+                            {testimonial.comment}
+                          </p>
+                        </div>
                       </div>
 
-                      {/* Review details */}
-                      <div className="space-y-1.5">
-                        <h4 className="font-serif text-xs font-bold text-neutral-900">{testimonial.title}</h4>
-                        <p className="text-[11px] text-neutral-500 font-light leading-relaxed">
-                          {testimonial.comment}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-6 mt-6 border-t border-neutral-50">
-                      <div className="flex items-center space-x-2.5">
-                        <div className="w-7 h-7 bg-brand-rosegold/10 text-brand-rosegold rounded-full flex items-center justify-center font-bold text-[10px] uppercase">
-                          {testimonial.author[0]}
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-bold text-neutral-800 block">
-                            {testimonial.author}
-                          </span>
-                          {testimonial.verified && (
-                            <span className="text-[7px] text-green-600 font-bold uppercase tracking-wider flex items-center gap-0.5 mt-0.5">
-                              <CheckCircle2 size={8} className="fill-green-100" /> Verified Purchase
+                      <div className="flex items-center justify-between pt-6 mt-6 border-t border-neutral-50">
+                        <div className="flex items-center space-x-2.5">
+                          <div className="w-7 h-7 bg-brand-rosegold/10 text-brand-rosegold rounded-full flex items-center justify-center font-bold text-[10px] uppercase">
+                            {testimonial.author[0]}
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-neutral-800 block">
+                              {testimonial.author}
                             </span>
-                          )}
+                            {testimonial.verified && (
+                              <span className="text-[7px] text-green-600 font-bold uppercase tracking-wider flex items-center gap-0.5 mt-0.5">
+                                <CheckCircle2 size={8} className="fill-green-100" /> Verified Purchase
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
 
-                      <button
-                        onClick={() => handleDeleteTestimonial(testimonial._id)}
-                        className="text-neutral-400 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                        title="Delete Review"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                        <button
+                          onClick={() => handleDeleteTestimonial(testimonial._id)}
+                          className="text-neutral-400 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          title="Delete Review"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                {renderPagination(
+                  testimonials.length,
+                  currentTestimonialPage,
+                  testimonialsPerPage,
+                  setCurrentTestimonialPage,
+                  setTestimonialsPerPage,
+                  "testimonials",
+                  [9, 18, 27, 45]
+                )}
               </div>
             )}
           </section>
         )}
-      </main>
+          </main>
+        </div>
+      </div>
 
       {/* Add / Edit Product Modal Form */}
       {isModalOpen && (
@@ -1682,3 +2198,4 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     </div>
   );
 }
+
