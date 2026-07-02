@@ -3,8 +3,10 @@ import { Link } from "react-router-dom";
 import { Instagram, Mail, ArrowRight, ShieldCheck, Facebook } from "lucide-react";
 import { toast } from "sonner";
 import blackLogoImg from "../../assets/images/saiksha-logo-black.jpeg";
+import { useStoreSettings } from "../../context/StoreSettingsContext";
 
 export default function Footer() {
+  const { settings } = useStoreSettings();
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -90,7 +92,7 @@ export default function Footer() {
                 <h4 className="text-[10px] uppercase tracking-[3px] text-brand-rosegold font-bold">Social Connection</h4>
                 <div className="flex flex-col space-y-3">
                   <a
-                    href="https://www.instagram.com/saiksha.jewels/"
+                    href={settings.instagramUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center space-x-3 w-fit group"
@@ -127,7 +129,7 @@ export default function Footer() {
 
 
             <div className="pt-8 border-t border-white/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-[11px] uppercase tracking-[1.5px] text-neutral-500 font-medium">
-              <span>&copy; {new Date().getFullYear()} Saiksha Jewelry. All Rights Reserved.</span>
+              <span>&copy; {new Date().getFullYear()} {settings.storeName} Jewelry. All Rights Reserved.</span>
               <div className="flex gap-4">
                 <Link to="/privacy" className="hover:text-white text-[10px]">Privacy</Link>
                 <Link to="/shipping" className="hover:text-white text-[10px]">Shipping Policy</Link>
@@ -141,7 +143,7 @@ export default function Footer() {
               <span className="text-[10px] uppercase tracking-[4px] text-brand-rosegold font-bold block">The Inner Circle</span>
               <h3 className="text-2xl font-serif text-white">Secure Your Invitation</h3>
               <p className="text-xs text-neutral-400 font-light leading-relaxed tracking-wide">
-                Join our exclusive registry to secure priority reservations for fresh collection releases, legacy drops, and a <span className="text-white font-medium">10% welcome invitation</span> gift.
+                Join our exclusive registry to secure priority reservations for fresh collection releases, legacy drops, and <span className="text-white font-medium">{settings.couponText || "a welcome invitation"}</span>.
               </p>
             </div>
 

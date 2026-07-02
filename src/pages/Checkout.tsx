@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { 
   ChevronRight, 
@@ -11,18 +11,24 @@ import {
   CheckCircle2, 
   Sparkles,
   Copy,
-  Check
+  Check,
+  Truck
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useCart } from "../context/CartContext";
 import { useProducts } from "../context/ProductContext";
+import { useStoreSettings } from "../context/StoreSettingsContext";
+import { useCustomerAuth } from "../context/CustomerAuthContext";
 import logoImg from "../assets/images/saiksha-logo-mark.png";
 import { toast } from "sonner";
 
 export default function Checkout() {
   const navigate = useNavigate();
   const { products } = useProducts();
-  const { cart, cartTotal, clearCart } = useCart();
+  const { settings } = useStoreSettings();
+  const { customer } = useCustomerAuth();
+  const { cart, cartTotal, clearCart, appliedCoupon, couponDiscountPercent, autoDiscountCampaign, hasCampaignFreeShipping, applyCoupon, clearCoupon } = useCart();
+  const [couponInput, setCouponInput] = useState(appliedCoupon || "");
   const [step, setStep] = useState(1); // 1: Shipping, 2: Payment, 3: Review
   
   // Shipping Form State
@@ -114,6 +120,19 @@ export default function Checkout() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!customer) return;
+    setEmail((current) => current || customer.email || "");
+    setPhone((current) => current || customer.savedAddress?.phone || customer.phone || "");
+    const saved = customer.savedAddress || {};
+    setFirstName((current) => current || saved.firstName || customer.name.split(" ")[0] || "");
+    setLastName((current) => current || saved.lastName || customer.name.split(" ").slice(1).join(" ") || "");
+    setSecondaryPhone((current) => current || saved.secondaryPhone || "");
+    setAddress((current) => current || saved.address || "");
+    setCity((current) => current || saved.city || "");
+    setPostalCode((current) => current || saved.postalCode || "");
+  }, [customer?.id]);
+
 
   // Draw items from live cart or use top signature products as fallback (for preview/test safety)
   const checkoutItems = cart.length > 0
@@ -129,10 +148,48 @@ export default function Checkout() {
     ? cartTotal 
     : checkoutItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-  // All orders: FREE shipping, no extra charges, no hidden fees
-  const discount = 0;
-  const shipping = 0;
-  const total = subTotal;
+  const freeShippingThreshold = Math.max(0, Number(settings.freeShippingThreshold || 0));
+  const discount = Math.round((subTotal * couponDiscountPercent) / 100);
+  const discountedSubtotal = Math.max(0, subTotal - discount);
+  const hasFreeShipping = hasCampaignFreeShipping || freeShippingThreshold === 0 || discountedSubtotal >= freeShippingThreshold;
+  const remainingForFreeShipping = Math.max(0, freeShippingThreshold - discountedSubtotal);
+  const shipping = hasFreeShipping ? 0 : 40;
+  const total = discountedSubtotal + shipping;
+
+  const handleApplyCoupon = (e: React.FormEvent) => {
+    e.preventDefault();
+    applyCoupon(couponInput);
+  };
+
+  useEffect(() => {
+    if (!email.trim() && phone.replace(/\D/g, "").length !== 10) return;
+    if (checkoutItems.length === 0 || orderId) return;
+
+    const timeout = window.setTimeout(() => {
+      fetch("/api/lead-captures", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "Checkout Recovery",
+          customer: {
+            name: `${firstName} ${lastName}`.trim(),
+            email,
+            phone
+          },
+          items: checkoutItems.map((item) => ({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            image: item.images[0]
+          })),
+          message: `Checkout started. Step ${step}. Total Rs ${total.toLocaleString()}`
+        })
+      }).catch((error) => console.warn("Could not save checkout recovery lead.", error));
+    }, 1400);
+
+    return () => window.clearTimeout(timeout);
+  }, [email, phone, firstName, lastName, checkoutItems, orderId, step, total]);
 
   const handleCopyUpi = () => {
     navigator.clipboard.writeText("saiksha@upi");
@@ -191,10 +248,11 @@ export default function Checkout() {
               name: item.name,
               price: item.price,
               quantity: item.quantity,
-              image: item.images[0]
+              image: item.images[0],
+              category: item.category
             })),
             subTotal,
-            discount: 0,
+            discount,
             shipping,
             total,
             paymentMethod: "Cash on Delivery"
@@ -268,7 +326,8 @@ export default function Checkout() {
                     name: item.name,
                     price: item.price,
                     quantity: item.quantity,
-                    image: item.images[0]
+                    image: item.images[0],
+                    category: item.category
                   })),
                   subTotal,
                   discount,
@@ -372,6 +431,18 @@ export default function Checkout() {
             )}
           </div>
 
+          {!customer && (
+            <div className="rounded-2xl border border-brand-rosegold/20 bg-brand-cream/40 p-5 text-left">
+              <p className="text-sm font-serif text-brand-ink">Create an account to track your order and save your details for next time.</p>
+              <Link
+                to={`/register?email=${encodeURIComponent(email)}`}
+                className="mt-3 inline-flex rounded-lg bg-brand-ink px-4 py-3 text-[10px] uppercase tracking-widest font-bold text-white"
+              >
+                Create Account
+              </Link>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row gap-4 pt-4">
             <Link 
               to="/collection" 
@@ -380,7 +451,7 @@ export default function Checkout() {
               Continue Shopping
             </Link>
             <a 
-              href={`https://wa.me/916351357299?text=Hello%20Saiksha,%20I%20have%20placed%20order%20${orderId}.%20Please%20assist%20me.`}
+              href={`https://wa.me/${settings.whatsappNumber}?text=${encodeURIComponent(`Hello ${settings.storeName}, I have placed order ${orderId}. Please assist me.`)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex-1 bg-white hover:bg-neutral-50 text-brand-ink py-4.5 rounded-xl text-[10px] uppercase tracking-[2px] font-bold border border-black/5 shadow-sm transition-all text-center flex items-center justify-center space-x-2"
@@ -561,8 +632,50 @@ export default function Checkout() {
 
               <div className="space-y-3">
 
+                <div className={cn(
+                  "flex items-center gap-3 rounded-2xl border px-5 py-3.5",
+                  hasFreeShipping ? "bg-green-50 border-green-100" : "bg-amber-50 border-amber-100"
+                )}>
+                  <Truck className={cn("shrink-0", hasFreeShipping ? "text-green-500" : "text-amber-500")} size={18} />
+                  <div>
+                    <p className={cn("text-xs font-bold", hasFreeShipping ? "text-green-700" : "text-amber-700")}>
+                      {hasFreeShipping ? "You've unlocked FREE Shipping!" : `Add Rs ${remainingForFreeShipping.toLocaleString()} more for free shipping`}
+                    </p>
+                    <p className={cn("text-[10px] mt-0.5", hasFreeShipping ? "text-green-600" : "text-amber-600")}>
+                      {hasFreeShipping ? settings.shippingNote : `Free shipping starts at Rs ${freeShippingThreshold.toLocaleString()}.`}
+                    </p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleApplyCoupon} className="rounded-2xl border border-brand-rosegold/20 bg-brand-cream/30 px-5 py-3.5 space-y-3">
+                  <div>
+                    <p className="text-xs font-bold text-[#7a603c]">{settings.couponText || "Have a coupon code?"}</p>
+                    {appliedCoupon && <p className="mt-1 text-[9px] uppercase tracking-widest text-green-700">{appliedCoupon} applied - {couponDiscountPercent}% off</p>}
+                    {!appliedCoupon && autoDiscountCampaign?.type === "Percent Off" && (
+                      <p className="mt-1 text-[9px] uppercase tracking-widest text-green-700">{autoDiscountCampaign.badgeText || autoDiscountCampaign.title} applied automatically</p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      placeholder={settings.couponCode || "Coupon code"}
+                      className="min-w-0 flex-1 rounded-lg border border-brand-rosegold/20 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider outline-none focus:border-brand-rosegold"
+                    />
+                    {appliedCoupon ? (
+                      <button type="button" onClick={clearCoupon} className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 cursor-pointer">
+                        Remove
+                      </button>
+                    ) : (
+                      <button type="submit" className="rounded-lg bg-brand-ink px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white cursor-pointer">
+                        Apply
+                      </button>
+                    )}
+                  </div>
+                </form>
+
                 {/* Free Shipping Trust Banner */}
-                <div className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-2xl px-5 py-3.5">
+                <div className="hidden">
                   <div className="text-green-500 shrink-0 text-lg">🎁</div>
                   <div>
                     <p className="text-xs font-bold text-green-700">You've unlocked FREE Shipping!</p>
@@ -746,10 +859,24 @@ export default function Checkout() {
                   <span className="text-neutral-400 uppercase tracking-widest font-bold text-[9px]">Subtotal</span>
                   <span className="font-bold text-neutral-900">₹{subTotal.toLocaleString()}</span>
                 </div>
+                {discount > 0 && (
+                  <div className="flex justify-between text-xs text-green-600">
+                    <span className="uppercase tracking-widest font-bold text-[9px]">Discount ({appliedCoupon || autoDiscountCampaign?.title})</span>
+                    <span className="font-bold">- Rs {discount.toLocaleString()}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-xs">
                   <span className="text-neutral-400 uppercase tracking-widest font-bold text-[9px]">Shipping</span>
-                  <span className="text-green-600 font-bold uppercase text-[9px] tracking-wider">FREE</span>
+                  <span className={cn("font-bold uppercase text-[9px] tracking-wider", hasFreeShipping ? "text-green-600" : "text-neutral-900")}>
+                    {hasFreeShipping ? "FREE" : `Rs ${shipping.toLocaleString()}`}
+                  </span>
                 </div>
+                {(appliedCoupon || autoDiscountCampaign) && (
+                  <div className="rounded-xl bg-green-50 border border-green-100 p-3 text-[10px] text-green-700">
+                    <p className="font-bold">{appliedCoupon || autoDiscountCampaign?.title} discount applied</p>
+                    <p className="mt-1 uppercase tracking-widest">{couponDiscountPercent}% off this order</p>
+                  </div>
+                )}
                 <div className="flex justify-between text-lg font-bold font-serif pt-4 border-t border-black/5">
                   <span>Total</span>
                   <span>₹{total.toLocaleString()}</span>
@@ -760,6 +887,27 @@ export default function Checkout() {
                  <ShieldCheck size={18} className="text-brand-rosegold shrink-0" />
                  <p className="text-[9px] uppercase tracking-widest font-bold text-neutral-500 leading-snug">Your connection is secure and your data is protected.</p>
               </div>
+
+              <a
+                href={`https://wa.me/${settings.whatsappNumber}?text=${encodeURIComponent("Hello Saiksha, I need help completing my checkout.")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  fetch("/api/lead-captures", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      source: "WhatsApp Help",
+                      customer: { name: `${firstName} ${lastName}`.trim(), email, phone },
+                      items: checkoutItems.map((item) => ({ id: item.id, name: item.name, price: item.price, quantity: item.quantity, image: item.images[0] })),
+                      message: "Clicked checkout WhatsApp help"
+                    })
+                  }).catch(() => {});
+                }}
+                className="block rounded-xl border border-green-100 bg-green-50 p-4 text-center text-[10px] uppercase tracking-widest font-bold text-green-700 hover:bg-green-100"
+              >
+                Need help? Chat on WhatsApp
+              </a>
            </div>
         </aside>
       </div>

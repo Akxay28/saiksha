@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { CartItem, Product } from "../types";
 import { toast } from "sonner";
+import { useStoreSettings } from "./StoreSettingsContext";
+import { DiscountCampaign, useDiscountCampaigns } from "./DiscountCampaignContext";
 
 interface CartContextType {
   cart: CartItem[];
@@ -10,11 +12,20 @@ interface CartContextType {
   clearCart: () => void;
   cartCount: number;
   cartTotal: number;
+  appliedCoupon: string | null;
+  couponDiscountPercent: number;
+  autoDiscountCampaign: DiscountCampaign | null;
+  autoDiscountPercent: number;
+  hasCampaignFreeShipping: boolean;
+  applyCoupon: (code: string) => boolean;
+  clearCoupon: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
+  const { settings } = useStoreSettings();
+  const { getBestCartCampaign, hasFreeShippingCampaign } = useDiscountCampaigns();
   const [showLeadModal, setShowLeadModal] = useState(false);
   const [leadName, setLeadName] = useState("");
   const [leadEmail, setLeadEmail] = useState("");
@@ -27,10 +38,33 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
     return [];
   });
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("saiksha-applied-coupon");
+    }
+    return null;
+  });
 
   useEffect(() => {
     localStorage.setItem("saiksha-cart", JSON.stringify(cart));
   }, [cart]);
+
+  useEffect(() => {
+    if (appliedCoupon) {
+      localStorage.setItem("saiksha-applied-coupon", appliedCoupon);
+    } else {
+      localStorage.removeItem("saiksha-applied-coupon");
+    }
+  }, [appliedCoupon]);
+
+  useEffect(() => {
+    if (!appliedCoupon) return;
+    const normalizedApplied = appliedCoupon.trim().toUpperCase();
+    const normalizedCurrent = settings.couponCode.trim().toUpperCase();
+    if (!normalizedCurrent || normalizedApplied !== normalizedCurrent || settings.couponDiscountPercent <= 0) {
+      setAppliedCoupon(null);
+    }
+  }, [appliedCoupon, settings.couponCode, settings.couponDiscountPercent]);
 
   const getCartSessionId = () => {
     const storageKey = "saiksha-cart-session-id";
@@ -56,7 +90,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       toast.success(`Added ${resolvedProduct.name} to bag`);
     }
 
-    if (!localStorage.getItem("saiksha-cart-lead-saved") && !sessionStorage.getItem("saiksha-cart-lead-dismissed")) {
+    if (!localStorage.getItem("saiksha-cart-lead-saved-v2")) {
       setShowLeadModal(true);
     }
 
@@ -89,10 +123,44 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = () => {
     setCart([]);
+    setAppliedCoupon(null);
   };
 
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
   const cartTotal = cart.reduce((total, item) => total + item.price * item.quantity, 0);
+  const autoDiscountCampaign = getBestCartCampaign(cart, cartTotal);
+  const autoDiscountPercent = autoDiscountCampaign?.type === "Percent Off" ? Math.max(0, Number(autoDiscountCampaign.discountPercent || 0)) : 0;
+  const hasCampaignFreeShipping = hasFreeShippingCampaign(cart, cartTotal);
+  const couponDiscountPercent = appliedCoupon ? Math.max(0, Number(settings.couponDiscountPercent || 0)) : autoDiscountPercent;
+
+  const applyCoupon = (code: string) => {
+    const submittedCode = code.trim().toUpperCase();
+    const activeCode = settings.couponCode.trim().toUpperCase();
+    if (!submittedCode) {
+      toast.error("Please enter a coupon code.");
+      return false;
+    }
+    if (!activeCode || submittedCode !== activeCode || settings.couponDiscountPercent <= 0) {
+      toast.error("This coupon code is not valid.");
+      return false;
+    }
+    if (settings.couponMinOrder > 0 && cartTotal < settings.couponMinOrder) {
+      toast.error(`This coupon requires a minimum order of Rs ${settings.couponMinOrder.toLocaleString()}.`);
+      return false;
+    }
+    if (settings.couponExpiresAt && new Date(settings.couponExpiresAt) < new Date()) {
+      toast.error("This coupon has expired.");
+      return false;
+    }
+    setAppliedCoupon(activeCode);
+    toast.success(`${activeCode} applied for ${settings.couponDiscountPercent}% off.`);
+    return true;
+  };
+
+  const clearCoupon = () => {
+    setAppliedCoupon(null);
+    toast.info("Coupon removed.");
+  };
 
   const handleSaveCartLead = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,7 +198,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         throw new Error("Failed to save cart lead");
       }
 
-      localStorage.setItem("saiksha-cart-lead-saved", "1");
+      localStorage.setItem("saiksha-cart-lead-saved-v2", "1");
       setShowLeadModal(false);
       toast.success("Your bag has been saved. Our team can help if you need anything.");
     } catch (error) {
@@ -142,7 +210,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const dismissLeadModal = () => {
-    sessionStorage.setItem("saiksha-cart-lead-dismissed", "1");
     setShowLeadModal(false);
   };
 
@@ -156,6 +223,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
         clearCart,
         cartCount,
         cartTotal,
+        appliedCoupon,
+        couponDiscountPercent,
+        autoDiscountCampaign,
+        autoDiscountPercent,
+        hasCampaignFreeShipping,
+        applyCoupon,
+        clearCoupon,
       }}
     >
       {children}

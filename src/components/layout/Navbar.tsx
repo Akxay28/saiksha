@@ -5,7 +5,8 @@ import {
   Search,
   ShoppingCart,
   Menu,
-  X
+  X,
+  User
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../../lib/utils";
@@ -13,11 +14,13 @@ import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
 import { useLiveVisitors } from "../../hooks/useLiveVisitors";
 import logoImg from "../../assets/images/saiksha-logo-mark.png";
+import { useCustomerAuth } from "../../context/CustomerAuthContext";
 
 export default function Navbar() {
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
   const { activeVisitors } = useLiveVisitors();
+  const { customer } = useCustomerAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isScrolled, setIsScrolled] = useState(false);
@@ -191,6 +194,9 @@ export default function Navbar() {
                 </span>
               )}
             </Link>
+            <Link to={customer ? "/account" : "/login"} className="text-brand-ink hover:text-brand-hotpink transition-colors relative group" title={customer ? "My account" : "Login"}>
+              <User size={21} strokeWidth={1.2} className={cn("transition-all duration-300 group-hover:scale-110", customer && "text-brand-rosegold")} />
+            </Link>
             <Link to="/cart" className="text-brand-ink hover:text-brand-hotpink transition-colors relative group">
               <ShoppingCart size={21} strokeWidth={1.2} className="transition-all duration-300 group-hover:scale-110" />
               {cartCount > 0 && (
@@ -301,6 +307,14 @@ export default function Navbar() {
                   >
                     <Heart size={20} className={cn(wishlistCount > 0 && "fill-brand-rosegold text-brand-rosegold")} />
                     <span className="text-sm uppercase tracking-widest font-bold">Wishlist ({wishlistCount})</span>
+                  </Link>
+                  <Link
+                    to={customer ? "/account" : "/login"}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center space-x-3 text-neutral-600 hover:text-brand-ink"
+                  >
+                    <User size={20} className={cn(customer && "text-brand-rosegold")} />
+                    <span className="text-sm uppercase tracking-widest font-bold">{customer ? "My Account" : "Login"}</span>
                   </Link>
                 </div>
               </div>

@@ -15,6 +15,7 @@ interface ProductContextType {
   addProduct: (productData: Omit<Product, "id">) => Promise<ProductActionResult>;
   updateProduct: (id: string, productData: Partial<Product>) => Promise<ProductActionResult>;
   deleteProduct: (id: string) => Promise<ProductActionResult>;
+  adjustInventory: (id: string, change: number, note: string) => Promise<ProductActionResult>;
   recordProductView: (id: string) => Promise<number | null>;
 }
 
@@ -129,6 +130,31 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const adjustInventory = async (id: string, change: number, note: string) => {
+    try {
+      const response = await fetch(`/api/admin/products/${id}/inventory`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ change, note })
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        return {
+          success: false,
+          status: response.status,
+          message: errorData.error || "Failed to adjust inventory"
+        };
+      }
+      const updatedProduct = await response.json();
+      setProducts((prev) => prev.map((p) => (p.id === id ? updatedProduct : p)));
+      return { success: true };
+    } catch (err) {
+      console.error("Error adjusting inventory:", err);
+      return { success: false, message: "Could not connect to the inventory API." };
+    }
+  };
+
   const recordProductView = async (id: string) => {
     try {
       const response = await fetch(`/api/products/${id}/view`, {
@@ -148,7 +174,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <ProductContext.Provider value={{ products, loading, error, getProductById, addProduct, updateProduct, deleteProduct, recordProductView }}>
+    <ProductContext.Provider value={{ products, loading, error, getProductById, addProduct, updateProduct, deleteProduct, adjustInventory, recordProductView }}>
       {children}
     </ProductContext.Provider>
   );

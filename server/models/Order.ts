@@ -31,6 +31,18 @@ export interface IOrder {
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
   razorpaySignature?: string;
+  customerAccountId?: string;
+  timeline?: Array<{
+    title: string;
+    note: string;
+    createdAt: Date;
+  }>;
+  refund?: {
+    status: "None" | "Requested" | "Approved" | "Rejected" | "Refunded";
+    amount: number;
+    reason?: string;
+    updatedAt?: Date;
+  };
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -66,7 +78,21 @@ const OrderSchema: Schema = new Schema(
     paymentStatus: { type: String, default: "Pending" },
     razorpayOrderId: { type: String },
     razorpayPaymentId: { type: String },
-    razorpaySignature: { type: String }
+    razorpaySignature: { type: String },
+    customerAccountId: { type: String },
+    timeline: [
+      {
+        title: { type: String, required: true },
+        note: { type: String, default: "" },
+        createdAt: { type: Date, default: Date.now }
+      }
+    ],
+    refund: {
+      status: { type: String, default: "None" },
+      amount: { type: Number, default: 0 },
+      reason: { type: String },
+      updatedAt: { type: Date }
+    }
   },
   {
     timestamps: true

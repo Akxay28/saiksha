@@ -27,6 +27,18 @@ export interface IProduct {
   shippingRoute?: string;
   exchangePolicy?: string;
   views?: number;
+  variants?: Array<{
+    name: string;
+    value: string;
+    price?: number;
+    stock?: number;
+  }>;
+  inventoryHistory?: Array<{
+    change: number;
+    stockAfter: number;
+    note: string;
+    createdAt: Date;
+  }>;
   updatedAt?: Date;
 }
 
@@ -57,7 +69,23 @@ const ProductSchema: Schema = new Schema(
     packaging: { type: String },
     shippingRoute: { type: String },
     exchangePolicy: { type: String },
-    views: { type: Number, default: 0 }
+    views: { type: Number, default: 0 },
+    variants: [
+      {
+        name: { type: String },
+        value: { type: String },
+        price: { type: Number },
+        stock: { type: Number }
+      }
+    ],
+    inventoryHistory: [
+      {
+        change: { type: Number, required: true },
+        stockAfter: { type: Number, required: true },
+        note: { type: String, default: "" },
+        createdAt: { type: Date, default: Date.now }
+      }
+    ]
   },
   {
     timestamps: true,

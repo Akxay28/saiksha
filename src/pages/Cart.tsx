@@ -3,15 +3,24 @@ import { Link, useNavigate } from "react-router-dom";
 import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, ShieldCheck, Truck, Sparkles, ReceiptText } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useProducts } from "../context/ProductContext";
+import { useStoreSettings } from "../context/StoreSettingsContext";
 import { cn } from "../lib/utils";
 import { motion } from "motion/react";
+import RecentlyViewedProducts from "../components/sections/RecentlyViewedProducts";
 
 export default function Cart() {
-  const { cart, addToCart, removeFromCart, updateQuantity, cartTotal } = useCart();
+  const { cart, addToCart, removeFromCart, updateQuantity, cartTotal, appliedCoupon, couponDiscountPercent, autoDiscountCampaign, hasCampaignFreeShipping, applyCoupon, clearCoupon } = useCart();
   const { products } = useProducts();
+  const { settings } = useStoreSettings();
+  const [couponInput, setCouponInput] = React.useState(appliedCoupon || "");
 
-  const shipping: number = 0;
-  const total = cartTotal + shipping;
+  const freeShippingThreshold = Math.max(0, Number(settings.freeShippingThreshold || 0));
+  const discountAmount = Math.round((cartTotal * couponDiscountPercent) / 100);
+  const discountedSubtotal = Math.max(0, cartTotal - discountAmount);
+  const remainingForFreeShipping = Math.max(0, freeShippingThreshold - discountedSubtotal);
+  const hasFreeShipping = hasCampaignFreeShipping || freeShippingThreshold === 0 || discountedSubtotal >= freeShippingThreshold;
+  const shipping: number = hasFreeShipping ? 0 : 40;
+  const total = discountedSubtotal + shipping;
   const cartIds = new Set(cart.map((item) => item.id));
   const recommendedProducts = products
     .filter((product) => !cartIds.has(product.id) && product.stock > 0)
@@ -22,6 +31,11 @@ export default function Cart() {
   const handleCheckout = () => {
     if (cart.length === 0) return;
     navigate("/checkout");
+  };
+
+  const handleApplyCoupon = (e: React.FormEvent) => {
+    e.preventDefault();
+    applyCoupon(couponInput);
   };
 
   if (cart.length === 0) {
@@ -201,11 +215,71 @@ export default function Cart() {
             </h3>
             
             <div className="space-y-5">
+              <div className={cn(
+                "rounded-xl border p-4 text-xs",
+                hasFreeShipping ? "border-green-100 bg-green-50 text-green-700" : "border-amber-100 bg-amber-50 text-amber-700"
+              )}>
+                <p className="font-bold">
+                  {hasFreeShipping ? "Free shipping unlocked" : `Add Rs ${remainingForFreeShipping.toLocaleString()} more for free shipping`}
+                </p>
+                <p className="mt-1 text-[10px] opacity-80">
+                  {hasFreeShipping
+                    ? settings.shippingNote
+                    : `Free shipping starts at Rs ${freeShippingThreshold.toLocaleString()}.`}
+                </p>
+              </div>
+
+              <form onSubmit={handleApplyCoupon} className="rounded-xl border border-brand-rosegold/20 bg-brand-cream/25 p-4 space-y-3">
+                <div>
+                  <p className="text-xs font-bold text-[#7a603c]">{settings.couponText || "Have a coupon code?"}</p>
+                  {appliedCoupon && (
+                    <p className="mt-1 text-[10px] uppercase tracking-widest text-green-700">
+                      {appliedCoupon} applied - {couponDiscountPercent}% off
+                    </p>
+                  )}
+                  {!appliedCoupon && autoDiscountCampaign?.type === "Percent Off" && (
+                    <p className="mt-1 text-[10px] uppercase tracking-widest text-green-700">
+                      {autoDiscountCampaign.badgeText || autoDiscountCampaign.title} applied automatically
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    placeholder={settings.couponCode || "Coupon code"}
+                    className="min-w-0 flex-1 rounded-lg border border-brand-rosegold/20 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider outline-none focus:border-brand-rosegold"
+                  />
+                  {appliedCoupon ? (
+                    <button type="button" onClick={clearCoupon} className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 cursor-pointer">
+                      Remove
+                    </button>
+                  ) : (
+                    <button type="submit" className="rounded-lg bg-brand-ink px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white cursor-pointer">
+                      Apply
+                    </button>
+                  )}
+                </div>
+              </form>
+
               <div className="flex justify-between text-neutral-400 text-sm font-light">
                 <span>Selection Subtotal</span>
                 <span className="text-brand-ink font-medium">₹{cartTotal.toLocaleString()}</span>
               </div>
-              
+              {discountAmount > 0 && (
+                <div className="flex justify-between text-sm font-light text-green-600">
+                  <span>Discount ({appliedCoupon || autoDiscountCampaign?.title})</span>
+                  <span className="font-bold">- Rs {discountAmount.toLocaleString()}</span>
+                </div>
+              )}
+
+              <div className="flex justify-between text-neutral-400 text-sm font-light">
+                <span>Shipping</span>
+                <span className={cn("font-bold", hasFreeShipping ? "text-green-600" : "text-brand-ink")}>
+                  {hasFreeShipping ? "FREE" : `Rs ${shipping.toLocaleString()}`}
+                </span>
+              </div>
+
               <div className="pt-6 border-t border-black/5 flex justify-between">
                 <div>
                   <span className="text-brand-ink font-serif text-2xl">Total</span>
@@ -239,23 +313,45 @@ export default function Cart() {
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-widest font-bold text-brand-ink">Express Delivery</p>
-                  <p className="text-[9px] text-neutral-400">Fast world-wide logistics</p>
+                  <p className="text-[9px] text-neutral-400">{settings.shippingNote}</p>
                 </div>
               </div>
             </div>
 
+            {cart.length < 2 && (
+              <div className="rounded-xl border border-brand-rosegold/20 bg-brand-cream/30 p-4 text-xs text-[#7a603c]">
+                <p className="font-bold">Bundle idea: add one more favorite piece before checkout.</p>
+                <p className="mt-1 text-[10px]">Jewelry buyers often pair earrings with necklaces or gifts. Use your active coupon when eligible.</p>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-green-100 bg-green-50 p-4 text-xs text-green-700">
+              <p className="font-bold">Need help choosing?</p>
+              <a
+                href={`https://wa.me/${settings.whatsappNumber}?text=${encodeURIComponent("Hello Saiksha, I need help choosing from my cart.")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-block text-[10px] uppercase tracking-widest font-bold"
+              >
+                Chat on WhatsApp
+              </a>
+            </div>
+
             <div className="pt-8 border-t border-black/5">
-              <div className="bg-brand-cream/30 p-4 rounded-lg flex items-center justify-between group cursor-pointer border border-transparent hover:border-brand-rosegold/20 transition-all">
+              <div className="bg-brand-cream/30 p-4 rounded-lg flex items-center justify-between group border border-transparent hover:border-brand-rosegold/20 transition-all">
                 <div className="flex items-center gap-3">
                   <Sparkles size={16} className="text-brand-rosegold" />
-                  <span className="text-[10px] uppercase tracking-[2px] font-bold text-neutral-500">Add Promo Code</span>
+                  <span className="text-[10px] uppercase tracking-[2px] font-bold text-neutral-500">
+                    {settings.couponCode ? `Use ${settings.couponCode}` : "Promo Code"}
+                  </span>
                 </div>
-                <Plus size={14} className="text-neutral-400 group-hover:text-brand-rosegold group-hover:rotate-90 transition-all duration-500" />
+                <Sparkles size={14} className="text-neutral-400 group-hover:text-brand-rosegold transition-all duration-500" />
               </div>
             </div>
           </div>
         </aside>
       </div>
+      <RecentlyViewedProducts />
     </div>
   );
 }

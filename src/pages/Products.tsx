@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Filter, ChevronDown, Search, X, SlidersHorizontal, Sparkles, Star, Quote } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useProducts } from "../context/ProductContext";
 import ProductCard from "../components/ui/ProductCard";
 import { cn } from "../lib/utils";
+import { applySeo, getSiteUrl } from "../lib/seo";
 
 import TrustSection from "../components/sections/TrustSection";
 
@@ -103,6 +104,22 @@ export default function Products() {
     ? "Browse matching Saiksha pieces by product name, category, materials, stones, and description."
     : currentContent.subtitle;
 
+  useEffect(() => {
+    const path = `/collection${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+    applySeo({
+      title: `${heroTitle} | Saiksha Jewelry Collection`,
+      description: `${heroSubtitle} Shop handcrafted earrings, necklaces, bestsellers, and gift-ready jewelry across India.`,
+      path,
+      structuredData: {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        name: heroTitle,
+        description: heroSubtitle,
+        url: `${getSiteUrl()}${path}`
+      }
+    });
+  }, [heroTitle, heroSubtitle, searchParams]);
+
   const filteredProducts = useMemo(() => {
     let result = [...products];
 
@@ -163,6 +180,21 @@ export default function Products() {
 
     return result;
   }, [activeCategory, products, searchQuery, sortBy]);
+
+  useEffect(() => {
+    if (!searchQuery || searchQuery.length < 2) return;
+    const timeout = window.setTimeout(() => {
+      fetch("/api/search-analytics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: searchQuery,
+          resultCount: filteredProducts.length
+        })
+      }).catch((error) => console.warn("Could not record search analytics.", error));
+    }, 500);
+    return () => window.clearTimeout(timeout);
+  }, [searchQuery, filteredProducts.length]);
 
   const toggleCategory = (cat: string) => {
     if (cat === "ALL PRODUCTS") {

@@ -8,6 +8,7 @@ import ProductCard from "../components/ui/ProductCard";
 import TrustSection from "../components/sections/TrustSection";
 import BrandPhilosophy from "../components/sections/BrandPhilosophy";
 import Testimonials from "../components/sections/Testimonials";
+import RecentlyViewedProducts from "../components/sections/RecentlyViewedProducts";
 
 export default function Home() {
   const { products } = useProducts();
@@ -167,6 +168,7 @@ export default function Home() {
       <TrustSection />
 
       <Testimonials />
+      <RecentlyViewedProducts />
 
       {/* Final SEO Footer Copy */}
       <section className="py-16 text-center border-t border-black/5 bg-white">

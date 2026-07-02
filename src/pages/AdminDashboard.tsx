@@ -14,8 +14,10 @@ import {
   Database,
   Eye,
   Search,
+  SlidersHorizontal,
   ShoppingBag,
   MessageSquare,
+  MessageCircle,
   Clock,
   ChevronDown,
   ChevronUp,
@@ -29,7 +31,13 @@ import {
   Users,
   Home,
   Package,
-  UserRoundCheck
+  UserRoundCheck,
+  Settings,
+  Download
+  , Heart
+  , Megaphone
+  , Send
+  , Tag
 } from "lucide-react";
 import { useProducts } from "../context/ProductContext";
 import { Product } from "../types";
@@ -37,6 +45,8 @@ import { toast } from "sonner";
 import logoImg from "../assets/images/saiksha-logo-mark.png";
 import { cn } from "../lib/utils";
 import { useLiveVisitors } from "../hooks/useLiveVisitors";
+import { StoreSettings, useStoreSettings } from "../context/StoreSettingsContext";
+import { useDiscountCampaigns } from "../context/DiscountCampaignContext";
 
 interface AdminDashboardProps {
   onClose: () => void;
@@ -55,8 +65,15 @@ interface AdminCustomer {
   source: "Customer" | "Lead";
 }
 
+type ProductCategoryFilter = "All" | Product["category"];
+type ProductStatusFilter = "All" | "New" | "Sale" | "Limited" | "Custom";
+type ProductStockFilter = "All" | "In Stock" | "Low Stock" | "Out of Stock";
+type ProductSortOption = "Newest" | "Name A-Z" | "Price Low" | "Price High" | "Stock Low" | "Most Viewed";
+
 export default function AdminDashboard({ onClose }: AdminDashboardProps) {
-  const { products, addProduct, updateProduct, deleteProduct } = useProducts();
+  const { products, addProduct, updateProduct, deleteProduct, adjustInventory } = useProducts();
+  const { settings, updateSettings } = useStoreSettings();
+  const { refreshCampaigns } = useDiscountCampaigns();
   const { activeVisitors, totalVisitors } = useLiveVisitors({ countAsVisitor: false });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
@@ -65,23 +82,34 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<"overview" | "products" | "orders" | "customers" | "cartLeads" | "testimonials">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "products" | "orders" | "customers" | "accounts" | "segments" | "discounts" | "campaigns" | "reviewAutomation" | "cartLeads" | "wishlistLeads" | "leadCaptures" | "searchAnalytics" | "testimonials" | "settings">("overview");
 
   // Orders State
   const [orders, setOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
   const [ordersPerPage, setOrdersPerPage] = useState(10);
   const [currentOrderPage, setCurrentOrderPage] = useState(1);
+  const [salesAnalytics, setSalesAnalytics] = useState<any | null>(null);
 
   // Customer list controls
   const [customerSearch, setCustomerSearch] = useState("");
   const [customersPerPage, setCustomersPerPage] = useState(10);
   const [currentCustomerPage, setCurrentCustomerPage] = useState(1);
+  const [customerMeta, setCustomerMeta] = useState<Record<string, any>>({});
+  const [editingCustomerKey, setEditingCustomerKey] = useState<string | null>(null);
+  const [customerMetaForm, setCustomerMetaForm] = useState({ tags: "", note: "" });
+  const [customerAccounts, setCustomerAccounts] = useState<any[]>([]);
 
   // Product list controls
   const [productSearch, setProductSearch] = useState("");
+  const [productCategoryFilter, setProductCategoryFilter] = useState<ProductCategoryFilter>("All");
+  const [productStatusFilter, setProductStatusFilter] = useState<ProductStatusFilter>("All");
+  const [productStockFilter, setProductStockFilter] = useState<ProductStockFilter>("All");
+  const [productPriceFilter, setProductPriceFilter] = useState("All");
+  const [productSort, setProductSort] = useState<ProductSortOption>("Newest");
   const [productsPerPage, setProductsPerPage] = useState(10);
   const [currentProductPage, setCurrentProductPage] = useState(1);
 
@@ -91,11 +119,56 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const [cartLeadsPerPage, setCartLeadsPerPage] = useState(10);
   const [currentCartLeadPage, setCurrentCartLeadPage] = useState(1);
 
+  // Wishlist Recovery State
+  const [wishlistLeads, setWishlistLeads] = useState<any[]>([]);
+  const [loadingWishlistLeads, setLoadingWishlistLeads] = useState(false);
+  const [wishlistLeadsPerPage, setWishlistLeadsPerPage] = useState(10);
+  const [currentWishlistLeadPage, setCurrentWishlistLeadPage] = useState(1);
+
+  // Search Analytics State
+  const [searchAnalytics, setSearchAnalytics] = useState<any[]>([]);
+  const [loadingSearchAnalytics, setLoadingSearchAnalytics] = useState(false);
+
+  // Lead Capture State
+  const [leadCaptures, setLeadCaptures] = useState<any[]>([]);
+  const [loadingLeadCaptures, setLoadingLeadCaptures] = useState(false);
+  const [leadCapturesPerPage, setLeadCapturesPerPage] = useState(10);
+  const [currentLeadCapturePage, setCurrentLeadCapturePage] = useState(1);
+
+  // Growth Tools State
+  const [discountCampaigns, setDiscountCampaigns] = useState<any[]>([]);
+  const [customerSegments, setCustomerSegments] = useState<any>({ counts: {}, customers: [] });
+  const [whatsAppCampaigns, setWhatsAppCampaigns] = useState<any[]>([]);
+  const [reviewReminders, setReviewReminders] = useState<any[]>([]);
+  const [discountForm, setDiscountForm] = useState({
+    title: "Buy 2 get 10% off",
+    type: "Percent Off",
+    status: "Paused",
+    discountPercent: 10,
+    minCartValue: 0,
+    minItems: 2,
+    category: "All",
+    startsAt: "",
+    endsAt: "",
+    badgeText: "Auto applied"
+  });
+  const [campaignForm, setCampaignForm] = useState({
+    title: "New arrivals follow-up",
+    fromNumber: settings.whatsappNumber || "917383055032",
+    audience: "All Customers",
+    manualNumbers: "",
+    message: "Hello {{name}}, Saiksha has a new jewelry update for you. Explore the latest collection today."
+  });
+
   // Testimonials State
   const [testimonials, setTestimonials] = useState<any[]>([]);
   const [loadingTestimonials, setLoadingTestimonials] = useState(false);
   const [testimonialsPerPage, setTestimonialsPerPage] = useState(9);
   const [currentTestimonialPage, setCurrentTestimonialPage] = useState(1);
+
+  // Store Settings State
+  const [settingsForm, setSettingsForm] = useState<StoreSettings>(settings);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   // CRUD & Modal State for Products
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -124,7 +197,8 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     careInstructions: "",
     packaging: "",
     shippingRoute: "",
-    exchangePolicy: ""
+    exchangePolicy: "",
+    variantsText: ""
   });
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -159,9 +233,24 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     if (isAuthenticated) {
       fetchOrders();
       fetchCartLeads();
+      fetchWishlistLeads();
+      fetchLeadCaptures();
+      fetchSearchAnalytics();
       fetchTestimonials();
+      fetchSalesAnalytics();
+      fetchCustomerMeta();
+      fetchCustomerAccounts();
+      fetchDiscountCampaigns();
+      fetchCustomerSegments();
+      fetchWhatsAppCampaigns();
+      fetchReviewReminders();
     }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    setSettingsForm(settings);
+    setCampaignForm((prev) => ({ ...prev, fromNumber: prev.fromNumber || settings.whatsappNumber || "917383055032" }));
+  }, [settings]);
 
   const fetchOrders = async () => {
     setLoadingOrders(true);
@@ -197,6 +286,94 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     }
   };
 
+  const fetchWishlistLeads = async () => {
+    setLoadingWishlistLeads(true);
+    try {
+      const response = await fetch("/api/admin/wishlist-leads", { credentials: "include" });
+      if (response.ok) {
+        setWishlistLeads(await response.json());
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+      }
+    } catch (err) {
+      console.error("Error fetching wishlist leads:", err);
+    } finally {
+      setLoadingWishlistLeads(false);
+    }
+  };
+
+  const fetchSearchAnalytics = async () => {
+    setLoadingSearchAnalytics(true);
+    try {
+      const response = await fetch("/api/admin/search-analytics", { credentials: "include" });
+      if (response.ok) {
+        setSearchAnalytics(await response.json());
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+      }
+    } catch (err) {
+      console.error("Error fetching search analytics:", err);
+    } finally {
+      setLoadingSearchAnalytics(false);
+    }
+  };
+
+  const fetchLeadCaptures = async () => {
+    setLoadingLeadCaptures(true);
+    try {
+      const response = await fetch("/api/admin/lead-captures", { credentials: "include" });
+      if (response.ok) {
+        setLeadCaptures(await response.json());
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+      }
+    } catch (err) {
+      console.error("Error fetching lead captures:", err);
+    } finally {
+      setLoadingLeadCaptures(false);
+    }
+  };
+
+  const fetchDiscountCampaigns = async () => {
+    try {
+      const response = await fetch("/api/admin/discount-campaigns", { credentials: "include" });
+      if (response.ok) setDiscountCampaigns(await response.json());
+      else if (response.status === 401) setIsAuthenticated(false);
+    } catch (err) {
+      console.error("Error fetching discount campaigns:", err);
+    }
+  };
+
+  const fetchCustomerSegments = async () => {
+    try {
+      const response = await fetch("/api/admin/customer-segments", { credentials: "include" });
+      if (response.ok) setCustomerSegments(await response.json());
+      else if (response.status === 401) setIsAuthenticated(false);
+    } catch (err) {
+      console.error("Error fetching customer segments:", err);
+    }
+  };
+
+  const fetchWhatsAppCampaigns = async () => {
+    try {
+      const response = await fetch("/api/admin/whatsapp-campaigns", { credentials: "include" });
+      if (response.ok) setWhatsAppCampaigns(await response.json());
+      else if (response.status === 401) setIsAuthenticated(false);
+    } catch (err) {
+      console.error("Error fetching WhatsApp campaigns:", err);
+    }
+  };
+
+  const fetchReviewReminders = async () => {
+    try {
+      const response = await fetch("/api/admin/review-reminders", { credentials: "include" });
+      if (response.ok) setReviewReminders(await response.json());
+      else if (response.status === 401) setIsAuthenticated(false);
+    } catch (err) {
+      console.error("Error fetching review reminders:", err);
+    }
+  };
+
   const fetchTestimonials = async () => {
     setLoadingTestimonials(true);
     try {
@@ -210,6 +387,90 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     } finally {
       setLoadingTestimonials(false);
     }
+  };
+
+  const fetchSalesAnalytics = async () => {
+    try {
+      const response = await fetch("/api/admin/analytics/sales", { credentials: "include" });
+      if (response.ok) {
+        setSalesAnalytics(await response.json());
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+      }
+    } catch (err) {
+      console.error("Error fetching sales analytics:", err);
+    }
+  };
+
+  const fetchCustomerMeta = async () => {
+    try {
+      const response = await fetch("/api/admin/customers/meta", { credentials: "include" });
+      if (response.ok) {
+        const data = await response.json();
+        setCustomerMeta(
+          data.reduce((map: Record<string, any>, item: any) => {
+            map[item.key] = item;
+            return map;
+          }, {})
+        );
+      }
+    } catch (err) {
+      console.error("Error fetching customer meta:", err);
+    }
+  };
+
+  const fetchCustomerAccounts = async () => {
+    try {
+      const response = await fetch("/api/admin/customer-accounts", { credentials: "include" });
+      if (response.ok) {
+        setCustomerAccounts(await response.json());
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+      }
+    } catch (err) {
+      console.error("Error fetching customer accounts:", err);
+    }
+  };
+
+  const openCustomerMetaEditor = (customer: AdminCustomer) => {
+    const meta = customerMeta[customer.key] || {};
+    setEditingCustomerKey(customer.key);
+    setCustomerMetaForm({
+      tags: (meta.tags || []).join(", "),
+      note: meta.note || ""
+    });
+  };
+
+  const saveCustomerMeta = async (customer: AdminCustomer) => {
+    try {
+      const response = await fetch(`/api/admin/customers/${encodeURIComponent(customer.key)}/meta`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: customer.name,
+          email: customer.email,
+          phone: customer.phone,
+          tags: customerMetaForm.tags,
+          note: customerMetaForm.note
+        })
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        setCustomerMeta((prev) => ({ ...prev, [customer.key]: updated }));
+        setEditingCustomerKey(null);
+        toast.success("Customer notes saved.");
+      } else {
+        toast.error("Could not save customer notes.");
+      }
+    } catch (err) {
+      console.error("Error saving customer meta:", err);
+      toast.error("Could not save customer notes.");
+    }
+  };
+
+  const exportAdminData = (type: "orders" | "products" | "customers") => {
+    window.open(`/api/admin/export/${type}`, "_blank");
   };
 
   // Authentication
@@ -257,6 +518,139 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     toast.info("Logged out from admin panel.");
   };
 
+  const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    const nextValue = type === "checkbox" ? (e.target as HTMLInputElement).checked : value;
+    setSettingsForm((prev) => ({
+      ...prev,
+      [name]: ["freeShippingThreshold", "couponDiscountPercent", "couponMinOrder", "couponUsageLimit"].includes(name) ? Number(nextValue) : nextValue
+    }));
+  };
+
+  const handleFollowUpTemplateChange = (index: number, field: "title" | "message", value: string) => {
+    setSettingsForm((prev) => {
+      const templates = [...(prev.cartLeadFollowUpTemplates || [])];
+      templates[index] = { ...templates[index], [field]: value };
+      return { ...prev, cartLeadFollowUpTemplates: templates };
+    });
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAuthenticated) return;
+    setSavingSettings(true);
+    const result = await updateSettings(settingsForm);
+    setSavingSettings(false);
+    if (result.success) {
+      toast.success("Store settings saved.");
+    } else if (result.status === 401) {
+      setIsAuthenticated(false);
+      toast.error("Admin session expired. Please log in again.");
+    } else {
+      toast.error(result.message || "Failed to save store settings.");
+    }
+  };
+
+  const handleSaveDiscountCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch("/api/admin/discount-campaigns", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(discountForm)
+      });
+      if (!response.ok) throw new Error("Failed to save campaign");
+      toast.success("Discount campaign added.");
+      setDiscountForm((prev) => ({ ...prev, status: "Paused" }));
+      fetchDiscountCampaigns();
+      refreshCampaigns();
+    } catch (err) {
+      console.error("Error saving discount campaign:", err);
+      toast.error("Could not save discount campaign.");
+    }
+  };
+
+  const handleUpdateDiscountCampaignStatus = async (campaign: any, status: "Active" | "Paused") => {
+    try {
+      const response = await fetch(`/api/admin/discount-campaigns/${campaign._id}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...campaign, status })
+      });
+      if (!response.ok) throw new Error("Failed to update campaign");
+      toast.success(`Campaign ${status.toLowerCase()}.`);
+      fetchDiscountCampaigns();
+      refreshCampaigns();
+    } catch (err) {
+      console.error("Error updating discount campaign:", err);
+      toast.error("Could not update campaign.");
+    }
+  };
+
+  const handleDeleteDiscountCampaign = async (id: string) => {
+    if (!window.confirm("Delete this discount campaign?")) return;
+    try {
+      const response = await fetch(`/api/admin/discount-campaigns/${id}`, { method: "DELETE", credentials: "include" });
+      if (!response.ok) throw new Error("Failed to delete campaign");
+      setDiscountCampaigns((prev) => prev.filter((campaign) => campaign._id !== id));
+      toast.success("Campaign deleted.");
+      refreshCampaigns();
+    } catch (err) {
+      console.error("Error deleting discount campaign:", err);
+      toast.error("Could not delete campaign.");
+    }
+  };
+
+  const audienceCustomers = (audience: string) => {
+    const allCustomers = customerSegments.customers || [];
+    if (audience === "All Customers") return allCustomers;
+    return allCustomers.filter((customer: any) => (customer.segments || []).includes(audience));
+  };
+
+  const buildWhatsAppCampaignUrl = (phone: string, message: string, name = "there") => {
+    const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
+    const text = message.replace(/{{name}}/g, name || "there").replace(/{{coupon}}/g, settings.couponCode || "our current offer");
+    return `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(text)}`;
+  };
+
+  const handleSaveWhatsAppCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch("/api/admin/whatsapp-campaigns", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...campaignForm,
+          manualNumbers: campaignForm.audience === "Manual"
+            ? campaignForm.manualNumbers
+            : audienceCustomers(campaignForm.audience).map((customer: any) => customer.phone).join(",")
+        })
+      });
+      if (!response.ok) throw new Error("Failed to prepare campaign");
+      toast.success("WhatsApp campaign prepared.");
+      fetchWhatsAppCampaigns();
+    } catch (err) {
+      console.error("Error preparing WhatsApp campaign:", err);
+      toast.error("Could not prepare WhatsApp campaign.");
+    }
+  };
+
+  const handleDeleteWhatsAppCampaign = async (id: string) => {
+    if (!window.confirm("Delete this WhatsApp campaign?")) return;
+    try {
+      const response = await fetch(`/api/admin/whatsapp-campaigns/${id}`, { method: "DELETE", credentials: "include" });
+      if (!response.ok) throw new Error("Failed to delete campaign");
+      setWhatsAppCampaigns((prev) => prev.filter((campaign) => campaign._id !== id));
+      toast.success("WhatsApp campaign deleted.");
+    } catch (err) {
+      console.error("Error deleting WhatsApp campaign:", err);
+      toast.error("Could not delete WhatsApp campaign.");
+    }
+  };
+
   // Order Fulfillment Updates
   const handleUpdateOrderStatus = async (orderId: string, status: string) => {
     try {
@@ -292,6 +686,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       if (response.ok) {
         setOrders((prev) => prev.filter((order) => order.orderId !== orderId));
         if (expandedOrderId === orderId) setExpandedOrderId(null);
+        if (selectedOrder?.orderId === orderId) setSelectedOrder(null);
         toast.success(`Order ${orderId} deleted.`);
       } else if (response.status === 401) {
         setIsAuthenticated(false);
@@ -303,6 +698,58 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     } catch (err) {
       console.error("Error deleting order:", err);
       toast.error("Could not delete order.");
+    }
+  };
+
+  const updateOrderInState = (updatedOrder: any) => {
+    setOrders((prev) => prev.map((order) => (order.orderId === updatedOrder.orderId ? updatedOrder : order)));
+    setSelectedOrder((current: any) => current?.orderId === updatedOrder.orderId ? updatedOrder : current);
+  };
+
+  const handleAddOrderTimeline = async (orderId: string) => {
+    const note = window.prompt("Add order timeline note");
+    if (!note) return;
+    try {
+      const response = await fetch(`/api/admin/orders/${orderId}/timeline`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Admin note", note })
+      });
+      if (response.ok) {
+        updateOrderInState(await response.json());
+        toast.success("Order timeline updated.");
+      } else {
+        toast.error("Could not add timeline note.");
+      }
+    } catch (err) {
+      console.error("Error adding timeline note:", err);
+      toast.error("Could not add timeline note.");
+    }
+  };
+
+  const handleUpdateRefund = async (orderId: string) => {
+    const status = window.prompt("Refund status: Requested, Approved, Rejected, Refunded, None", "Requested");
+    if (!status) return;
+    const amount = Number(window.prompt("Refund amount", "0") || 0);
+    const reason = window.prompt("Refund reason", "") || "";
+    try {
+      const response = await fetch(`/api/admin/orders/${orderId}/refund`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, amount, reason })
+      });
+      if (response.ok) {
+        updateOrderInState(await response.json());
+        toast.success("Refund details updated.");
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Could not update refund.");
+      }
+    } catch (err) {
+      console.error("Error updating refund:", err);
+      toast.error("Could not update refund.");
     }
   };
 
@@ -326,6 +773,129 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     } catch (err) {
       console.error("Error deleting cart lead:", err);
       toast.error("Could not delete cart lead.");
+    }
+  };
+
+  const handleUpdateCartLeadStatus = async (id: string, status: "Open" | "Contacted" | "Converted") => {
+    try {
+      const response = await fetch(`/api/admin/abandoned-carts/${id}/status`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      if (response.ok) {
+        const updatedLead = await response.json();
+        setCartLeads((prev) => prev.map((lead) => (lead._id === id ? updatedLead : lead)));
+        toast.success(`Cart lead marked ${status.toLowerCase()}.`);
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+        toast.error("Session expired. Please log in again.");
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Failed to update cart lead.");
+      }
+    } catch (err) {
+      console.error("Error updating cart lead:", err);
+      toast.error("Could not update cart lead.");
+    }
+  };
+
+  const handleDeleteWishlistLead = async (id: string) => {
+    if (!window.confirm("Delete this wishlist lead permanently?")) return;
+    try {
+      const response = await fetch(`/api/admin/wishlist-leads/${id}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+      if (response.ok) {
+        setWishlistLeads((prev) => prev.filter((lead) => lead._id !== id));
+        toast.success("Wishlist lead deleted.");
+      } else {
+        toast.error("Failed to delete wishlist lead.");
+      }
+    } catch (err) {
+      console.error("Error deleting wishlist lead:", err);
+      toast.error("Could not delete wishlist lead.");
+    }
+  };
+
+  const handleUpdateWishlistLeadStatus = async (id: string, status: "Open" | "Contacted" | "Converted") => {
+    try {
+      const response = await fetch(`/api/admin/wishlist-leads/${id}/status`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      if (response.ok) {
+        const updatedLead = await response.json();
+        setWishlistLeads((prev) => prev.map((lead) => (lead._id === id ? updatedLead : lead)));
+        toast.success(`Wishlist lead marked ${status.toLowerCase()}.`);
+      } else {
+        toast.error("Failed to update wishlist lead.");
+      }
+    } catch (err) {
+      console.error("Error updating wishlist lead:", err);
+      toast.error("Could not update wishlist lead.");
+    }
+  };
+
+  const handleDeleteSearchAnalytics = async (id: string) => {
+    try {
+      const response = await fetch(`/api/admin/search-analytics/${id}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+      if (response.ok) {
+        setSearchAnalytics((prev) => prev.filter((entry) => entry._id !== id));
+        toast.success("Search entry removed.");
+      } else {
+        toast.error("Failed to delete search entry.");
+      }
+    } catch (err) {
+      console.error("Error deleting search analytics:", err);
+      toast.error("Could not delete search entry.");
+    }
+  };
+
+  const handleDeleteLeadCapture = async (id: string) => {
+    if (!window.confirm("Delete this lead permanently?")) return;
+    try {
+      const response = await fetch(`/api/admin/lead-captures/${id}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+      if (response.ok) {
+        setLeadCaptures((prev) => prev.filter((lead) => lead._id !== id));
+        toast.success("Lead deleted.");
+      } else {
+        toast.error("Failed to delete lead.");
+      }
+    } catch (err) {
+      console.error("Error deleting lead:", err);
+      toast.error("Could not delete lead.");
+    }
+  };
+
+  const handleUpdateLeadCaptureStatus = async (id: string, status: "Open" | "Contacted" | "Converted") => {
+    try {
+      const response = await fetch(`/api/admin/lead-captures/${id}/status`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      if (response.ok) {
+        const updatedLead = await response.json();
+        setLeadCaptures((prev) => prev.map((lead) => (lead._id === id ? updatedLead : lead)));
+        toast.success(`Lead marked ${status.toLowerCase()}.`);
+      } else {
+        toast.error("Failed to update lead.");
+      }
+    } catch (err) {
+      console.error("Error updating lead:", err);
+      toast.error("Could not update lead.");
     }
   };
 
@@ -379,7 +949,8 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       careInstructions: "",
       packaging: "",
       shippingRoute: "",
-      exchangePolicy: ""
+      exchangePolicy: "",
+      variantsText: ""
     });
     setIsModalOpen(true);
   };
@@ -415,7 +986,8 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       careInstructions: product.careInstructions ? product.careInstructions.join("\n") : "",
       packaging: product.packaging || "",
       shippingRoute: product.shippingRoute || "",
-      exchangePolicy: product.exchangePolicy || ""
+      exchangePolicy: product.exchangePolicy || "",
+      variantsText: (product.variants || []).map((variant) => `${variant.name} | ${variant.value} | ${variant.price || ""} | ${variant.stock || ""}`).join("\n")
     });
     setIsModalOpen(true);
   };
@@ -445,6 +1017,22 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     const careInstructionsArray = formData.careInstructions
       ? formData.careInstructions.split("\n").filter((line) => line.trim() !== "")
       : [];
+    const variantsArray = formData.variantsText
+      ? formData.variantsText
+          .split("\n")
+          .map((line) => {
+            const [name, value, price, stock] = line.split("|").map((part) => part.trim());
+            return name && value
+              ? {
+                  name,
+                  value,
+                  price: price ? Number(price) : undefined,
+                  stock: stock ? Number(stock) : undefined
+                }
+              : null;
+          })
+          .filter(Boolean)
+      : [];
 
     const productPayload = {
       name: formData.name,
@@ -468,6 +1056,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       weight: formData.weight || undefined,
       certification: formData.certification || undefined,
       careInstructions: careInstructionsArray.length > 0 ? careInstructionsArray : undefined,
+      variants: variantsArray.length > 0 ? variantsArray : undefined,
       packaging: formData.packaging || undefined,
       shippingRoute: formData.shippingRoute || undefined,
       exchangePolicy: formData.exchangePolicy || undefined
@@ -508,12 +1097,45 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     }
   };
 
+  const handleAdjustInventory = async (product: Product) => {
+    const changeValue = window.prompt(`Adjust stock for ${product.name}. Use positive or negative number.`, "0");
+    if (changeValue === null) return;
+    const change = Number(changeValue);
+    if (!Number.isFinite(change) || change === 0) {
+      toast.error("Enter a valid non-zero stock adjustment.");
+      return;
+    }
+    const note = window.prompt("Inventory note", change > 0 ? "Stock added" : "Stock reduced") || "";
+    const result = await adjustInventory(product.id, change, note);
+    if (result.success) {
+      toast.success("Inventory adjusted and logged.");
+    } else {
+      showProductActionError(result.status, result.message);
+    }
+  };
+
+  const getCartLeadStatusClass = (status?: string) => {
+    if (status === "Converted") return "bg-green-50 text-green-700 border-green-100";
+    if (status === "Contacted") return "bg-blue-50 text-blue-700 border-blue-100";
+    return "bg-amber-50 text-amber-700 border-amber-100";
+  };
+
+  const buildCartLeadFollowUpUrl = (lead: any, message: string) => {
+    const cleanPhone = String(lead.customer?.phone || "").replace(/\D/g, "");
+    const personalized = message
+      .replace(/{{name}}/g, lead.customer?.name || "there")
+      .replace(/{{coupon}}/g, settings.couponCode || "our current offer");
+    return `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(personalized)}`;
+  };
+
   // Stats calculation
   const totalProducts = products.length;
   const pendingOrdersCount = orders.filter((o) => o.status === "Pending").length;
   const totalReviewsCount = testimonials.length;
   const totalProductViews = products.reduce((total, product) => total + (product.views || 0), 0);
   const openCartLeadsCount = cartLeads.filter((lead) => lead.status !== "Converted").length;
+  const openWishlistLeadsCount = wishlistLeads.filter((lead) => lead.status !== "Converted").length;
+  const openLeadCapturesCount = leadCaptures.filter((lead) => lead.status !== "Converted").length;
   const lowStockProducts = products
     .filter((product) => product.stock <= 5)
     .slice(0, 5);
@@ -584,12 +1206,68 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     { id: "products" as const, label: "Products", count: totalProducts, icon: Package },
     { id: "orders" as const, label: "Orders", count: orders.length, icon: ShoppingBag },
     { id: "customers" as const, label: "Customers", count: customers.length, icon: Users },
+    { id: "accounts" as const, label: "Accounts", count: customerAccounts.length, icon: UserRoundCheck },
+    { id: "segments" as const, label: "Segments", count: (customerSegments.customers || []).length, icon: Tag },
+    { id: "discounts" as const, label: "Discounts", count: discountCampaigns.filter((campaign) => campaign.status === "Active").length, icon: Megaphone },
+    { id: "campaigns" as const, label: "Campaign Center", count: whatsAppCampaigns.length, icon: Send },
+    { id: "reviewAutomation" as const, label: "Review Requests", count: reviewReminders.length, icon: Star },
     { id: "cartLeads" as const, label: "Cart Leads", count: openCartLeadsCount, icon: UserRoundCheck },
-    { id: "testimonials" as const, label: "Testimonials", count: totalReviewsCount, icon: MessageSquare }
+    { id: "wishlistLeads" as const, label: "Wishlist Leads", count: openWishlistLeadsCount, icon: Heart },
+    { id: "leadCaptures" as const, label: "Lead Captures", count: openLeadCapturesCount, icon: MessageCircle },
+    { id: "searchAnalytics" as const, label: "Search Analytics", count: searchAnalytics.length, icon: Search },
+    { id: "testimonials" as const, label: "Testimonials", count: totalReviewsCount, icon: MessageSquare },
+    { id: "settings" as const, label: "Store Settings", count: null, icon: Settings }
   ];
-  const filteredProducts = products.filter((product) =>
-    product.name.toLowerCase().includes(productSearch.trim().toLowerCase())
-  );
+  const productCategories: ProductCategoryFilter[] = ["All", "Earrings", "Necklaces", "Bestsellers", "New Arrivals", "Gifts"];
+  const productPriceFilters = ["All", "Under Rs 1,000", "Rs 1,000 - Rs 2,500", "Rs 2,500 - Rs 5,000", "Above Rs 5,000"];
+  const productFiltersActive = [
+    productSearch.trim(),
+    productCategoryFilter !== "All",
+    productStatusFilter !== "All",
+    productStockFilter !== "All",
+    productPriceFilter !== "All",
+    productSort !== "Newest"
+  ].some(Boolean);
+  const getProductDisplayPrice = (product: Product) => product.isSale && product.salePrice ? product.salePrice : product.price;
+  const clearProductFilters = () => {
+    setProductSearch("");
+    setProductCategoryFilter("All");
+    setProductStatusFilter("All");
+    setProductStockFilter("All");
+    setProductPriceFilter("All");
+    setProductSort("Newest");
+  };
+  const filteredProducts = products
+    .filter((product) => {
+      const query = productSearch.trim().toLowerCase();
+      if (query && !product.name.toLowerCase().includes(query)) return false;
+      if (productCategoryFilter !== "All" && product.category !== productCategoryFilter) return false;
+
+      if (productStatusFilter === "New" && !product.isNew) return false;
+      if (productStatusFilter === "Sale" && !product.isSale) return false;
+      if (productStatusFilter === "Limited" && !product.isLimited) return false;
+      if (productStatusFilter === "Custom" && !product.isCustom) return false;
+
+      if (productStockFilter === "In Stock" && product.stock <= 0) return false;
+      if (productStockFilter === "Low Stock" && (product.stock <= 0 || product.stock > 5)) return false;
+      if (productStockFilter === "Out of Stock" && product.stock !== 0) return false;
+
+      const displayPrice = getProductDisplayPrice(product);
+      if (productPriceFilter === "Under Rs 1,000" && displayPrice >= 1000) return false;
+      if (productPriceFilter === "Rs 1,000 - Rs 2,500" && (displayPrice < 1000 || displayPrice > 2500)) return false;
+      if (productPriceFilter === "Rs 2,500 - Rs 5,000" && (displayPrice < 2500 || displayPrice > 5000)) return false;
+      if (productPriceFilter === "Above Rs 5,000" && displayPrice <= 5000) return false;
+
+      return true;
+    })
+    .sort((a, b) => {
+      if (productSort === "Name A-Z") return a.name.localeCompare(b.name);
+      if (productSort === "Price Low") return getProductDisplayPrice(a) - getProductDisplayPrice(b);
+      if (productSort === "Price High") return getProductDisplayPrice(b) - getProductDisplayPrice(a);
+      if (productSort === "Stock Low") return a.stock - b.stock;
+      if (productSort === "Most Viewed") return (b.views || 0) - (a.views || 0);
+      return 0;
+    });
   const filteredOrders = orders.filter((order) => {
     const query = orderSearch.trim().toLowerCase();
     if (!query) return true;
@@ -622,6 +1300,14 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     (currentCartLeadPage - 1) * cartLeadsPerPage,
     currentCartLeadPage * cartLeadsPerPage
   );
+  const paginatedWishlistLeads = wishlistLeads.slice(
+    (currentWishlistLeadPage - 1) * wishlistLeadsPerPage,
+    currentWishlistLeadPage * wishlistLeadsPerPage
+  );
+  const paginatedLeadCaptures = leadCaptures.slice(
+    (currentLeadCapturePage - 1) * leadCapturesPerPage,
+    currentLeadCapturePage * leadCapturesPerPage
+  );
   const paginatedTestimonials = testimonials.slice(
     (currentTestimonialPage - 1) * testimonialsPerPage,
     currentTestimonialPage * testimonialsPerPage
@@ -629,7 +1315,15 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
 
   useEffect(() => {
     setCurrentProductPage(1);
-  }, [productSearch, productsPerPage]);
+  }, [
+    productSearch,
+    productCategoryFilter,
+    productStatusFilter,
+    productStockFilter,
+    productPriceFilter,
+    productSort,
+    productsPerPage
+  ]);
 
   useEffect(() => {
     setCurrentOrderPage(1);
@@ -658,6 +1352,16 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     const totalPages = Math.max(1, Math.ceil(cartLeads.length / cartLeadsPerPage));
     if (currentCartLeadPage > totalPages) setCurrentCartLeadPage(totalPages);
   }, [cartLeads.length, cartLeadsPerPage, currentCartLeadPage]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(wishlistLeads.length / wishlistLeadsPerPage));
+    if (currentWishlistLeadPage > totalPages) setCurrentWishlistLeadPage(totalPages);
+  }, [wishlistLeads.length, wishlistLeadsPerPage, currentWishlistLeadPage]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(leadCaptures.length / leadCapturesPerPage));
+    if (currentLeadCapturePage > totalPages) setCurrentLeadCapturePage(totalPages);
+  }, [leadCaptures.length, leadCapturesPerPage, currentLeadCapturePage]);
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(testimonials.length / testimonialsPerPage));
@@ -974,6 +1678,63 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="xl:col-span-2 bg-white rounded-2xl border border-neutral-100 shadow-xs p-6 space-y-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className="font-serif font-bold text-neutral-950">Sales Analytics</h3>
+                <p className="text-[10px] text-neutral-400">Revenue, AOV, and product performance.</p>
+              </div>
+              <button onClick={fetchSalesAnalytics} className="text-[10px] uppercase tracking-widest font-bold text-[#a2855b] cursor-pointer">Refresh</button>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                ["Revenue", `Rs ${Number(salesAnalytics?.revenue || 0).toLocaleString()}`],
+                ["AOV", `Rs ${Number(salesAnalytics?.averageOrderValue || 0).toLocaleString()}`],
+                ["Orders", Number(salesAnalytics?.orderCount || 0).toLocaleString()],
+                ["Low Stock", Number(salesAnalytics?.lowStockCount || 0).toLocaleString()]
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl bg-neutral-50 border border-neutral-100 p-4">
+                  <p className="text-[9px] uppercase tracking-widest text-neutral-400 font-bold">{label}</p>
+                  <p className="mt-1 text-lg font-serif font-bold text-neutral-950">{value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <p className="text-[9px] uppercase tracking-widest text-neutral-400 font-bold">Top Products</p>
+              {(salesAnalytics?.topProducts || []).length === 0 ? (
+                <p className="text-xs text-neutral-400">No product sales yet.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {salesAnalytics.topProducts.map((product: any) => (
+                    <div key={product.name} className="flex items-center justify-between rounded-lg border border-neutral-100 px-3 py-2 text-xs">
+                      <span className="font-bold text-neutral-700 truncate">{product.name}</span>
+                      <span className="text-neutral-400">Qty {product.quantity} · Rs {Number(product.revenue || 0).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-neutral-100 shadow-xs p-6 space-y-4">
+            <div>
+              <h3 className="font-serif font-bold text-neutral-950">Data Exports</h3>
+              <p className="text-[10px] text-neutral-400">Download CSV files for accounting, ads, or records.</p>
+            </div>
+            {(["orders", "products", "customers"] as const).map((type) => (
+              <button
+                key={type}
+                onClick={() => exportAdminData(type)}
+                className="w-full flex items-center justify-between rounded-xl border border-neutral-100 px-4 py-3 text-xs font-bold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
+              >
+                <span className="capitalize">{type} CSV</span>
+                <Download size={14} className="text-neutral-400" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           <div className="xl:col-span-2 bg-white rounded-2xl border border-neutral-100 shadow-xs overflow-hidden">
             <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between">
               <div>
@@ -1077,19 +1838,113 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
         {/* TAB VIEW 1: PRODUCTS CATALOG LIST */}
         {activeTab === "products" && (
           <section className="bg-white rounded-2xl border border-neutral-100 shadow-xs overflow-hidden">
-            <div className="p-6 border-b border-neutral-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-neutral-50/20">
-              <div>
-                <h4 className="font-serif text-base font-bold text-neutral-900">Database Catalog Listing</h4>
-                <span className="text-[9px] text-neutral-400 tracking-wider font-mono">Collection Name: products</span>
+            <div className="p-6 border-b border-neutral-100 bg-neutral-50/20 space-y-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                  <h4 className="font-serif text-base font-bold text-neutral-900">Database Catalog Listing</h4>
+                  <span className="text-[9px] text-neutral-400 tracking-wider font-mono">Collection Name: products</span>
+                </div>
+                <div className="relative w-full lg:w-80">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                  <input
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    placeholder="Search product title"
+                    className="w-full rounded-lg border border-neutral-200 bg-white pl-9 pr-3 py-2.5 text-xs outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                  />
+                </div>
               </div>
-              <div className="relative w-full lg:w-80">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-                <input
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                  placeholder="Search product title"
-                  className="w-full rounded-lg border border-neutral-200 bg-white pl-9 pr-3 py-2.5 text-xs outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
-                />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3">
+                <label className="space-y-1">
+                  <span className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest font-bold text-neutral-400">
+                    <SlidersHorizontal size={11} />
+                    Category
+                  </span>
+                  <select
+                    value={productCategoryFilter}
+                    onChange={(e) => setProductCategoryFilter(e.target.value as ProductCategoryFilter)}
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-xs font-semibold text-neutral-700 outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                  >
+                    {productCategories.map((category) => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-[9px] uppercase tracking-widest font-bold text-neutral-400">Status</span>
+                  <select
+                    value={productStatusFilter}
+                    onChange={(e) => setProductStatusFilter(e.target.value as ProductStatusFilter)}
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-xs font-semibold text-neutral-700 outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                  >
+                    {["All", "New", "Sale", "Limited", "Custom"].map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-[9px] uppercase tracking-widest font-bold text-neutral-400">Stock</span>
+                  <select
+                    value={productStockFilter}
+                    onChange={(e) => setProductStockFilter(e.target.value as ProductStockFilter)}
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-xs font-semibold text-neutral-700 outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                  >
+                    {["All", "In Stock", "Low Stock", "Out of Stock"].map((stock) => (
+                      <option key={stock} value={stock}>{stock}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-[9px] uppercase tracking-widest font-bold text-neutral-400">Price</span>
+                  <select
+                    value={productPriceFilter}
+                    onChange={(e) => setProductPriceFilter(e.target.value)}
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-xs font-semibold text-neutral-700 outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                  >
+                    {productPriceFilters.map((price) => (
+                      <option key={price} value={price}>{price}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-[9px] uppercase tracking-widest font-bold text-neutral-400">Sort</span>
+                  <select
+                    value={productSort}
+                    onChange={(e) => setProductSort(e.target.value as ProductSortOption)}
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-xs font-semibold text-neutral-700 outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                  >
+                    {["Newest", "Name A-Z", "Price Low", "Price High", "Stock Low", "Most Viewed"].map((sort) => (
+                      <option key={sort} value={sort}>{sort}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="flex items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={clearProductFilters}
+                    disabled={!productFiltersActive}
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-[10px] uppercase tracking-widest font-bold text-neutral-500 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-neutral-400">
+                <span>
+                  Showing <strong className="text-neutral-700">{filteredProducts.length}</strong> of <strong className="text-neutral-700">{products.length}</strong> products
+                </span>
+                {productFiltersActive && (
+                  <span className="rounded-full border border-brand-rosegold/20 bg-brand-cream/20 px-2.5 py-1 font-bold uppercase tracking-wider text-[#a2855b]">
+                    Filters active
+                  </span>
+                )}
               </div>
             </div>
 
@@ -1171,6 +2026,13 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                             <Edit size={14} />
                           </button>
                           <button
+                            onClick={() => handleAdjustInventory(product)}
+                            className="p-2 text-neutral-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all cursor-pointer"
+                            title="Adjust Inventory"
+                          >
+                            <RefreshCw size={14} />
+                          </button>
+                          <button
                             onClick={() => setDeleteConfirmId(product.id)}
                             className="p-2 text-neutral-400 hover:text-red-500 hover:bg-neutral-50 rounded-lg transition-all cursor-pointer"
                             title="Delete Product"
@@ -1186,7 +2048,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
             </div>
             {filteredProducts.length === 0 ? (
               <div className="px-6 py-12 text-center text-xs text-neutral-400">
-                No products matched "{productSearch}".
+                No products matched the selected filters.
               </div>
             ) : (
               renderPagination(
@@ -1329,6 +2191,17 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                                 <option value="Cancelled">Cancelled</option>
                               </select>
                             </div>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedOrder(order);
+                              }}
+                              className="p-2 rounded-lg bg-neutral-50 text-neutral-500 hover:bg-[#bda88e]/10 hover:text-[#a2855b] transition-colors cursor-pointer"
+                              title="View Order Details"
+                            >
+                              <Eye size={14} />
+                            </button>
 
                             <button
                               onClick={(e) => {
@@ -1521,13 +2394,17 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                         <th className="py-4 px-6">Orders</th>
                         <th className="py-4 px-6">Spent</th>
                         <th className="py-4 px-6">Cart Leads</th>
+                        <th className="py-4 px-6">Tags & Notes</th>
                         <th className="py-4 px-6">Last Activity</th>
                         <th className="py-4 px-6 text-right">Type</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-50 text-xs">
-                      {paginatedCustomers.map((customer) => (
-                        <tr key={customer.key} className="hover:bg-neutral-50/30 transition-colors">
+                      {paginatedCustomers.map((customer) => {
+                        const meta = customerMeta[customer.key] || {};
+                        const isEditingMeta = editingCustomerKey === customer.key;
+                        return (
+                        <tr key={customer.key} className="hover:bg-neutral-50/30 transition-colors align-top">
                           <td className="py-4 px-6">
                             <div className="flex items-center gap-3">
                               <div className="h-9 w-9 rounded-full bg-brand-rosegold/10 text-brand-rosegold flex items-center justify-center text-[11px] font-bold uppercase">
@@ -1548,6 +2425,38 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                           <td className="py-4 px-6 font-bold text-neutral-900">{customer.totalOrders}</td>
                           <td className="py-4 px-6 font-bold text-neutral-900">Rs {customer.totalSpent.toLocaleString()}</td>
                           <td className="py-4 px-6 text-neutral-600">{customer.cartLeads}</td>
+                          <td className="py-4 px-6 min-w-[260px]">
+                            {isEditingMeta ? (
+                              <div className="space-y-2">
+                                <input
+                                  value={customerMetaForm.tags}
+                                  onChange={(e) => setCustomerMetaForm((prev) => ({ ...prev, tags: e.target.value }))}
+                                  placeholder="VIP, repeat buyer"
+                                  className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-[10px] outline-none focus:border-brand-rosegold"
+                                />
+                                <textarea
+                                  value={customerMetaForm.note}
+                                  onChange={(e) => setCustomerMetaForm((prev) => ({ ...prev, note: e.target.value }))}
+                                  placeholder="Private admin note"
+                                  rows={2}
+                                  className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-[10px] outline-none focus:border-brand-rosegold"
+                                />
+                                <div className="flex gap-2">
+                                  <button onClick={() => saveCustomerMeta(customer)} className="rounded bg-brand-ink px-3 py-1.5 text-[9px] uppercase tracking-wider font-bold text-white cursor-pointer">Save</button>
+                                  <button onClick={() => setEditingCustomerKey(null)} className="rounded border border-neutral-200 px-3 py-1.5 text-[9px] uppercase tracking-wider font-bold text-neutral-500 cursor-pointer">Cancel</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button onClick={() => openCustomerMetaEditor(customer)} className="w-full text-left space-y-2 rounded-lg border border-neutral-100 bg-neutral-50/60 p-3 hover:bg-neutral-50 cursor-pointer">
+                                <div className="flex flex-wrap gap-1">
+                                  {(meta.tags || []).length > 0 ? meta.tags.map((tag: string) => (
+                                    <span key={tag} className="rounded-full bg-white border border-neutral-100 px-2 py-0.5 text-[9px] font-bold text-neutral-500">{tag}</span>
+                                  )) : <span className="text-[10px] text-neutral-400">Add tags</span>}
+                                </div>
+                                <p className="line-clamp-2 text-[10px] text-neutral-500">{meta.note || "Add private note"}</p>
+                              </button>
+                            )}
+                          </td>
                           <td className="py-4 px-6 text-neutral-400">
                             {customer.lastActivity
                               ? new Date(customer.lastActivity).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
@@ -1564,7 +2473,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                             </span>
                           </td>
                         </tr>
-                      ))}
+                      );})}
                     </tbody>
                   </table>
                 </div>
@@ -1582,6 +2491,254 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
         )}
 
         {/* TAB VIEW 4: SAVED / ABANDONED CART LEADS */}
+        {activeTab === "accounts" && (
+          <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-neutral-100 flex items-center justify-between">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">Registered Customer Accounts</h4>
+                <p className="text-[10px] text-neutral-400 mt-0.5">People who created/login to customer accounts. Guest checkout still remains available.</p>
+              </div>
+              <button onClick={fetchCustomerAccounts} className="text-[9px] uppercase font-bold tracking-widest text-[#a2855b]">Refresh</button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-neutral-50 text-[9px] uppercase tracking-widest text-neutral-400">
+                  <tr>
+                    <th className="py-4 px-6">Account</th>
+                    <th className="py-4 px-6">Saved Address</th>
+                    <th className="py-4 px-6">Orders</th>
+                    <th className="py-4 px-6">Wishlist</th>
+                    <th className="py-4 px-6">Leads</th>
+                    <th className="py-4 px-6">Lifetime Spend</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {customerAccounts.map((account) => (
+                    <tr key={account.id} className="text-xs">
+                      <td className="py-4 px-6">
+                        <p className="font-bold text-neutral-900">{account.name}</p>
+                        <p className="text-neutral-400">{account.email}</p>
+                        <p className="text-neutral-400">{account.phone}</p>
+                      </td>
+                      <td className="py-4 px-6 text-neutral-500 max-w-xs">
+                        {account.savedAddress?.address ? (
+                          <span>{account.savedAddress.address}, {account.savedAddress.city} - {account.savedAddress.postalCode}</span>
+                        ) : (
+                          <span className="text-neutral-300">No address saved</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-6">
+                        <p className="font-bold">{account.totalOrders || 0}</p>
+                        <p className="text-[10px] text-neutral-400">{(account.orderIds || []).slice(0, 2).join(", ")}</p>
+                      </td>
+                      <td className="py-4 px-6">{account.wishlistProductIds?.length || 0} products</td>
+                      <td className="py-4 px-6">{account.cartLeadCount || 0} cart • {account.wishlistLeadCount || 0} wishlist</td>
+                      <td className="py-4 px-6 font-bold text-neutral-900">Rs {Number(account.lifetimeSpend || 0).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {customerAccounts.length === 0 && (
+                <div className="p-10 text-center text-sm text-neutral-400">No customer accounts yet.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "segments" && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
+              {["High Value", "Wishlist Users", "Cart Abandoned", "Repeat Buyers", "New Customers"].map((segment) => (
+                <div key={segment} className="rounded-2xl border border-neutral-100 bg-white p-5 shadow-sm">
+                  <p className="text-[9px] uppercase tracking-[2px] text-neutral-400 font-bold">{segment}</p>
+                  <p className="mt-3 text-3xl font-serif text-neutral-950">{customerSegments.counts?.[segment] || 0}</p>
+                </div>
+              ))}
+            </div>
+            <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-neutral-100 flex items-center justify-between">
+                <div>
+                  <h4 className="font-serif text-base font-bold text-neutral-900">Customer Segmentation</h4>
+                  <p className="text-[10px] text-neutral-400 mt-0.5">Automatically grouped from orders, cart leads, and wishlist leads.</p>
+                </div>
+                <button onClick={fetchCustomerSegments} className="text-[9px] uppercase font-bold tracking-widest text-[#a2855b]">Refresh</button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-neutral-50 text-[9px] uppercase tracking-widest text-neutral-400">
+                    <tr>
+                      <th className="py-4 px-6">Customer</th>
+                      <th className="py-4 px-6">Segments</th>
+                      <th className="py-4 px-6">Orders</th>
+                      <th className="py-4 px-6">Spent</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100">
+                    {(customerSegments.customers || []).map((customer: any) => (
+                      <tr key={customer.key} className="text-xs">
+                        <td className="py-4 px-6">
+                          <p className="font-bold text-neutral-900">{customer.name || "Unnamed customer"}</p>
+                          <p className="text-neutral-400">{customer.phone || customer.email}</p>
+                        </td>
+                        <td className="py-4 px-6">
+                          <div className="flex flex-wrap gap-1.5">
+                            {(customer.segments || []).map((segment: string) => (
+                              <span key={segment} className="rounded-full border border-brand-rosegold/20 bg-brand-cream/40 px-2 py-1 text-[9px] uppercase tracking-wider text-[#7a603c] font-bold">{segment}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-4 px-6">{customer.totalOrders}</td>
+                        <td className="py-4 px-6">Rs {Number(customer.totalSpent || 0).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "discounts" && (
+          <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-6">
+            <form onSubmit={handleSaveDiscountCampaign} className="bg-white rounded-2xl border border-neutral-100 p-6 shadow-sm space-y-4">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">Automated Discount Campaign</h4>
+                <p className="text-[10px] text-neutral-400 mt-0.5">Only active campaigns appear on the website and auto-apply in cart.</p>
+              </div>
+              <input value={discountForm.title} onChange={(e) => setDiscountForm((p) => ({ ...p, title: e.target.value }))} className="w-full rounded-lg border border-neutral-200 px-4 py-3 text-xs" placeholder="Campaign title" />
+              <div className="grid grid-cols-2 gap-3">
+                <select value={discountForm.type} onChange={(e) => setDiscountForm((p) => ({ ...p, type: e.target.value }))} className="rounded-lg border border-neutral-200 px-3 py-3 text-xs">
+                  <option>Percent Off</option>
+                  <option>Free Shipping</option>
+                </select>
+                <select value={discountForm.status} onChange={(e) => setDiscountForm((p) => ({ ...p, status: e.target.value }))} className="rounded-lg border border-neutral-200 px-3 py-3 text-xs">
+                  <option>Paused</option>
+                  <option>Active</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <input type="number" value={discountForm.discountPercent} onChange={(e) => setDiscountForm((p) => ({ ...p, discountPercent: Number(e.target.value) }))} className="rounded-lg border border-neutral-200 px-4 py-3 text-xs" placeholder="Discount %" />
+                <input type="number" value={discountForm.minItems} onChange={(e) => setDiscountForm((p) => ({ ...p, minItems: Number(e.target.value) }))} className="rounded-lg border border-neutral-200 px-4 py-3 text-xs" placeholder="Min items" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <input type="number" value={discountForm.minCartValue} onChange={(e) => setDiscountForm((p) => ({ ...p, minCartValue: Number(e.target.value) }))} className="rounded-lg border border-neutral-200 px-4 py-3 text-xs" placeholder="Min cart value" />
+                <select value={discountForm.category} onChange={(e) => setDiscountForm((p) => ({ ...p, category: e.target.value }))} className="rounded-lg border border-neutral-200 px-3 py-3 text-xs">
+                  {["All", "Earrings", "Necklaces", "Bestsellers", "New Arrivals", "Gifts"].map((category) => <option key={category}>{category}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <input type="date" value={discountForm.startsAt} onChange={(e) => setDiscountForm((p) => ({ ...p, startsAt: e.target.value }))} className="rounded-lg border border-neutral-200 px-4 py-3 text-xs" />
+                <input type="date" value={discountForm.endsAt} onChange={(e) => setDiscountForm((p) => ({ ...p, endsAt: e.target.value }))} className="rounded-lg border border-neutral-200 px-4 py-3 text-xs" />
+              </div>
+              <input value={discountForm.badgeText} onChange={(e) => setDiscountForm((p) => ({ ...p, badgeText: e.target.value }))} className="w-full rounded-lg border border-neutral-200 px-4 py-3 text-xs" placeholder="Storefront badge text" />
+              <button className="w-full rounded-lg bg-brand-ink py-3 text-[10px] uppercase tracking-widest font-bold text-white">Add Campaign</button>
+            </form>
+            <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-neutral-100 flex items-center justify-between">
+                <h4 className="font-serif text-base font-bold text-neutral-900">Campaigns</h4>
+                <button onClick={fetchDiscountCampaigns} className="text-[9px] uppercase font-bold tracking-widest text-[#a2855b]">Refresh</button>
+              </div>
+              <div className="divide-y divide-neutral-100">
+                {discountCampaigns.map((campaign) => (
+                  <div key={campaign._id} className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div>
+                      <p className="font-bold text-sm text-neutral-900">{campaign.title}</p>
+                      <p className="text-[10px] text-neutral-400 mt-1">{campaign.type} • {campaign.discountPercent}% • Min {campaign.minItems || 0} items • {campaign.category}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={cn("rounded-full border px-2 py-1 text-[9px] uppercase tracking-wider font-bold", campaign.status === "Active" ? "border-green-100 bg-green-50 text-green-700" : "border-neutral-200 bg-neutral-50 text-neutral-500")}>{campaign.status}</span>
+                      <button onClick={() => handleUpdateDiscountCampaignStatus(campaign, campaign.status === "Active" ? "Paused" : "Active")} className="rounded-lg border border-neutral-200 px-3 py-2 text-[9px] uppercase tracking-wider font-bold cursor-pointer">{campaign.status === "Active" ? "Pause" : "Activate"}</button>
+                      <button onClick={() => handleDeleteDiscountCampaign(campaign._id)} className="rounded-lg bg-red-50 px-3 py-2 text-[9px] uppercase tracking-wider font-bold text-red-600 cursor-pointer">Delete</button>
+                    </div>
+                  </div>
+                ))}
+                {discountCampaigns.length === 0 && <p className="p-8 text-sm text-neutral-400">No discount campaigns yet.</p>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "campaigns" && (
+          <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-6">
+            <form onSubmit={handleSaveWhatsAppCampaign} className="bg-white rounded-2xl border border-neutral-100 p-6 shadow-sm space-y-4">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">WhatsApp Campaign Center</h4>
+                <p className="text-[10px] text-neutral-400 mt-0.5">Prepared messages open in WhatsApp from the number logged in on this device.</p>
+              </div>
+              <input value={campaignForm.title} onChange={(e) => setCampaignForm((p) => ({ ...p, title: e.target.value }))} className="w-full rounded-lg border border-neutral-200 px-4 py-3 text-xs" placeholder="Campaign title" />
+              <input value={campaignForm.fromNumber} onChange={(e) => setCampaignForm((p) => ({ ...p, fromNumber: e.target.value }))} className="w-full rounded-lg border border-neutral-200 px-4 py-3 text-xs" placeholder="Sender WhatsApp number" />
+              <select value={campaignForm.audience} onChange={(e) => setCampaignForm((p) => ({ ...p, audience: e.target.value }))} className="w-full rounded-lg border border-neutral-200 px-3 py-3 text-xs">
+                {["All Customers", "High Value", "Wishlist Users", "Cart Abandoned", "Repeat Buyers", "New Customers", "Manual"].map((audience) => <option key={audience}>{audience}</option>)}
+              </select>
+              {campaignForm.audience === "Manual" && (
+                <textarea value={campaignForm.manualNumbers} onChange={(e) => setCampaignForm((p) => ({ ...p, manualNumbers: e.target.value }))} className="w-full rounded-lg border border-neutral-200 px-4 py-3 text-xs min-h-24" placeholder="One phone number per line" />
+              )}
+              <textarea value={campaignForm.message} onChange={(e) => setCampaignForm((p) => ({ ...p, message: e.target.value }))} className="w-full rounded-lg border border-neutral-200 px-4 py-3 text-xs min-h-32" placeholder="Message. Variables: {{name}}, {{coupon}}" />
+              <button className="w-full rounded-lg bg-brand-ink py-3 text-[10px] uppercase tracking-widest font-bold text-white">Prepare Campaign</button>
+            </form>
+            <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-neutral-100">
+                <h4 className="font-serif text-base font-bold text-neutral-900">Prepared Campaigns</h4>
+              </div>
+              <div className="divide-y divide-neutral-100">
+                {whatsAppCampaigns.map((campaign) => {
+                  const recipients = campaign.audience === "Manual"
+                    ? (campaign.manualNumbers || []).map((phone: string) => ({ phone, name: "there" }))
+                    : audienceCustomers(campaign.audience);
+                  return (
+                    <div key={campaign._id} className="p-5 space-y-4">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-sm text-neutral-900">{campaign.title}</p>
+                          <p className="text-[10px] text-neutral-400 mt-1">From {campaign.fromNumber || "current WhatsApp"} • {campaign.audience} • {recipients.length} recipients</p>
+                        </div>
+                        <button onClick={() => handleDeleteWhatsAppCampaign(campaign._id)} className="rounded-lg bg-red-50 px-3 py-2 text-[9px] uppercase tracking-wider font-bold text-red-600 cursor-pointer">Delete</button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {recipients.slice(0, 12).map((recipient: any, index: number) => (
+                          <a key={`${recipient.phone}-${index}`} href={buildWhatsAppCampaignUrl(recipient.phone, campaign.message, recipient.name)} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-green-100 bg-green-50 px-3 py-2 text-[9px] uppercase tracking-wider font-bold text-green-700">Send {index + 1}</a>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                {whatsAppCampaigns.length === 0 && <p className="p-8 text-sm text-neutral-400">No WhatsApp campaigns prepared yet.</p>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "reviewAutomation" && (
+          <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-neutral-100 flex items-center justify-between">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">Review Request Automation</h4>
+                <p className="text-[10px] text-neutral-400 mt-0.5">Delivered orders are ready for WhatsApp review follow-up.</p>
+              </div>
+              <button onClick={fetchReviewReminders} className="text-[9px] uppercase font-bold tracking-widest text-[#a2855b]">Refresh</button>
+            </div>
+            <div className="divide-y divide-neutral-100">
+              {reviewReminders.map((order) => (
+                <div key={order.orderId} className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div>
+                    <p className="font-bold text-sm text-neutral-900">{order.customerName || "Customer"} • {order.orderId}</p>
+                    <p className="text-[10px] text-neutral-400 mt-1">{order.phone} • Rs {Number(order.total || 0).toLocaleString()}</p>
+                  </div>
+                  <a
+                    href={buildWhatsAppCampaignUrl(order.phone, `Hello {{name}}, thank you for shopping with Saiksha. Could you share your experience here: ${window.location.origin}/testimonials`, order.customerName)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-[9px] uppercase tracking-wider font-bold text-green-700"
+                  >
+                    Send Review Request
+                  </a>
+                </div>
+              ))}
+              {reviewReminders.length === 0 && <p className="p-8 text-sm text-neutral-400">Delivered orders will appear here.</p>}
+            </div>
+          </div>
+        )}
+
         {activeTab === "cartLeads" && (
           <section className="space-y-6">
             <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
@@ -1630,7 +2787,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="rounded-full bg-amber-50 px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-700 border border-amber-100">
+                            <span className={cn("rounded-full px-3 py-1 text-[9px] font-bold uppercase tracking-wider border", getCartLeadStatusClass(lead.status))}>
                               {lead.status || "Open"}
                             </span>
                             <button
@@ -1658,6 +2815,35 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                           ))}
                         </div>
 
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border-t border-neutral-100 pt-4">
+                          {(settings.cartLeadFollowUpTemplates || []).slice(0, 2).map((template) => (
+                            <a
+                              key={template.title}
+                              href={buildCartLeadFollowUpUrl(lead, template.message)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-center gap-2 rounded-lg bg-green-50 border border-green-100 py-2.5 text-[10px] uppercase tracking-wider font-bold text-green-700 hover:bg-green-100"
+                            >
+                              <Phone size={12} />
+                              {template.title}
+                            </a>
+                          ))}
+                          <button
+                            onClick={() => handleUpdateCartLeadStatus(lead._id, "Contacted")}
+                            disabled={lead.status === "Contacted" || lead.status === "Converted"}
+                            className="rounded-lg bg-blue-50 border border-blue-100 py-2.5 text-[10px] uppercase tracking-wider font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            Mark Contacted
+                          </button>
+                          <button
+                            onClick={() => handleUpdateCartLeadStatus(lead._id, "Converted")}
+                            disabled={lead.status === "Converted"}
+                            className="rounded-lg bg-neutral-950 py-2.5 text-[10px] uppercase tracking-wider font-bold text-white hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            Mark Converted
+                          </button>
+                        </div>
+
                         <div className="flex items-center justify-between border-t border-neutral-100 pt-4 text-xs">
                           <span className="text-neutral-400">Saved {savedDate}</span>
                           <span className="font-bold text-neutral-950">Total Rs {Number(lead.total || 0).toLocaleString()}</span>
@@ -1674,6 +2860,286 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                   setCartLeadsPerPage,
                   "cart leads"
                 )}
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === "leadCaptures" && (
+          <section className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">Lead Captures</h4>
+                <p className="text-[10px] text-neutral-450 mt-0.5">Exit offers, product inquiries, price alerts, notify-me, checkout recovery, and WhatsApp help leads.</p>
+              </div>
+              <button onClick={fetchLeadCaptures} className="text-[9px] uppercase font-bold tracking-widest text-[#a2855b] hover:text-[#7a603c]">
+                Refresh Data
+              </button>
+            </div>
+
+            {loadingLeadCaptures ? (
+              <div className="bg-white rounded-2xl border border-neutral-100 p-10 text-center text-xs uppercase tracking-widest text-neutral-400 font-bold">
+                Loading leads...
+              </div>
+            ) : leadCaptures.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-neutral-100 p-12 text-center text-neutral-400">
+                <MessageCircle size={40} className="mx-auto text-neutral-300 mb-4" />
+                <h4 className="font-serif text-sm font-bold text-neutral-500">No Lead Captures Yet</h4>
+                <p className="text-[10px] text-neutral-400 font-light mt-1">New captured leads will appear here.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {paginatedLeadCaptures.map((lead) => {
+                    const phone = String(lead.customer?.phone || "").replace(/\D/g, "");
+                    const leadDate = lead.createdAt
+                      ? new Date(lead.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+                      : "N/A";
+                    const whatsappText = encodeURIComponent(`Hello ${lead.customer?.name || ""}, this is Saiksha following up on your ${lead.source}.`);
+                    return (
+                      <div key={lead._id} className="bg-white rounded-2xl border border-neutral-100 shadow-xs p-5 space-y-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-widest font-bold text-brand-rosegold">{lead.source}</p>
+                            <p className="text-xs font-bold text-neutral-950 mt-1">{lead.customer?.name || "Unnamed lead"}</p>
+                            <p className="text-[10px] text-neutral-400">{lead.customer?.email} · {lead.customer?.phone}</p>
+                            <p className="text-[10px] text-neutral-400 mt-1">{leadDate}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={cn("rounded-full border px-2.5 py-1 text-[9px] uppercase tracking-wider font-bold", getCartLeadStatusClass(lead.status))}>
+                              {lead.status || "Open"}
+                            </span>
+                            <button onClick={() => handleDeleteLeadCapture(lead._id)} className="p-2 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 cursor-pointer" title="Delete">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {lead.product?.name && (
+                          <div className="rounded-xl bg-neutral-50 p-3 flex items-center gap-3">
+                            {lead.product.image && <img src={lead.product.image} alt={lead.product.name} className="h-12 w-10 object-cover rounded bg-white" />}
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-bold text-neutral-800">{lead.product.name}</p>
+                              <p className="text-[10px] text-neutral-400">Rs {Number(lead.product.price || 0).toLocaleString()}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {(lead.items || []).length > 0 && (
+                          <div className="space-y-2">
+                            {(lead.items || []).slice(0, 3).map((item: any) => (
+                              <div key={`${lead._id}-${item.id}`} className="flex items-center justify-between rounded-lg bg-neutral-50 px-3 py-2 text-xs">
+                                <span className="truncate font-bold text-neutral-700">{item.name}</span>
+                                <span className="text-neutral-400">Qty {item.quantity || 1}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {lead.message && <p className="rounded-xl bg-brand-cream/25 p-3 text-xs text-neutral-500">{lead.message}</p>}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border-t border-neutral-100 pt-4">
+                          {phone && (
+                            <a href={`https://wa.me/91${phone}?text=${whatsappText}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 rounded-lg bg-green-50 border border-green-100 py-2.5 text-[10px] uppercase tracking-wider font-bold text-green-700 hover:bg-green-100">
+                              <Phone size={12} />
+                              WhatsApp
+                            </a>
+                          )}
+                          <button onClick={() => handleUpdateLeadCaptureStatus(lead._id, "Contacted")} disabled={lead.status === "Contacted" || lead.status === "Converted"} className="rounded-lg bg-blue-50 border border-blue-100 py-2.5 text-[10px] uppercase tracking-wider font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                            Mark Contacted
+                          </button>
+                          <button onClick={() => handleUpdateLeadCaptureStatus(lead._id, "Converted")} disabled={lead.status === "Converted"} className="rounded-lg bg-neutral-950 py-2.5 text-[10px] uppercase tracking-wider font-bold text-white hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                            Mark Converted
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {renderPagination(
+                  leadCaptures.length,
+                  currentLeadCapturePage,
+                  leadCapturesPerPage,
+                  setCurrentLeadCapturePage,
+                  setLeadCapturesPerPage,
+                  "lead captures"
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === "wishlistLeads" && (
+          <section className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">Wishlist Recovery Leads</h4>
+                <p className="text-[10px] text-neutral-450 mt-0.5">Customers who saved favorites and shared contact details for follow-up.</p>
+              </div>
+              <button onClick={fetchWishlistLeads} className="text-[9px] uppercase font-bold tracking-widest text-[#a2855b] hover:text-[#7a603c]">
+                Refresh Data
+              </button>
+            </div>
+
+            {loadingWishlistLeads ? (
+              <div className="bg-white rounded-2xl border border-neutral-100 p-10 text-center text-xs uppercase tracking-widest text-neutral-400 font-bold">
+                Loading wishlist leads...
+              </div>
+            ) : wishlistLeads.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-neutral-100 p-12 text-center text-neutral-400">
+                <Heart size={40} className="mx-auto text-neutral-300 mb-4" />
+                <h4 className="font-serif text-sm font-bold text-neutral-500">No Wishlist Leads Yet</h4>
+                <p className="text-[10px] text-neutral-400 font-light mt-1">Wishlist recovery submissions will appear here.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {paginatedWishlistLeads.map((lead) => {
+                    const savedDate = lead.createdAt
+                      ? new Date(lead.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+                      : "N/A";
+                    return (
+                      <div key={lead._id} className="bg-white rounded-2xl border border-neutral-100 shadow-xs p-5 space-y-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-xs font-bold text-neutral-950">{lead.customer?.name}</p>
+                            <p className="text-[10px] text-neutral-400">{lead.customer?.email} · {lead.customer?.phone}</p>
+                            <p className="text-[10px] text-neutral-400 mt-1">Saved {savedDate}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={cn("rounded-full border px-2.5 py-1 text-[9px] uppercase tracking-wider font-bold", getCartLeadStatusClass(lead.status))}>
+                              {lead.status || "Open"}
+                            </span>
+                            <button onClick={() => handleDeleteWishlistLead(lead._id)} className="p-2 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 cursor-pointer" title="Delete">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          {(lead.items || []).map((item: any) => (
+                            <div key={`${lead.sessionId}-${item.id}`} className="flex items-center gap-3 rounded-xl bg-neutral-50 p-3">
+                              <div className="h-12 w-10 shrink-0 overflow-hidden rounded bg-white border border-neutral-100">
+                                <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-bold text-neutral-800">{item.name}</p>
+                                <p className="text-[10px] text-neutral-400">Wishlist item</p>
+                              </div>
+                              <span className="text-xs font-bold text-neutral-900">Rs {Number(item.price || 0).toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border-t border-neutral-100 pt-4">
+                          <a
+                            href={`https://wa.me/91${String(lead.customer?.phone || "").replace(/\D/g, "")}?text=${encodeURIComponent(`Hello ${lead.customer?.name || ""}, you saved some Saiksha favorites. Would you like help choosing the right piece?`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center gap-2 rounded-lg bg-green-50 border border-green-100 py-2.5 text-[10px] uppercase tracking-wider font-bold text-green-700 hover:bg-green-100"
+                          >
+                            <Phone size={12} />
+                            WhatsApp
+                          </a>
+                          <button
+                            onClick={() => handleUpdateWishlistLeadStatus(lead._id, "Contacted")}
+                            disabled={lead.status === "Contacted" || lead.status === "Converted"}
+                            className="rounded-lg bg-blue-50 border border-blue-100 py-2.5 text-[10px] uppercase tracking-wider font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            Mark Contacted
+                          </button>
+                          <button
+                            onClick={() => handleUpdateWishlistLeadStatus(lead._id, "Converted")}
+                            disabled={lead.status === "Converted"}
+                            className="rounded-lg bg-neutral-950 py-2.5 text-[10px] uppercase tracking-wider font-bold text-white hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            Mark Converted
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {renderPagination(
+                  wishlistLeads.length,
+                  currentWishlistLeadPage,
+                  wishlistLeadsPerPage,
+                  setCurrentWishlistLeadPage,
+                  setWishlistLeadsPerPage,
+                  "wishlist leads"
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === "searchAnalytics" && (
+          <section className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex items-center justify-between">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">Search Analytics</h4>
+                <p className="text-[10px] text-neutral-450 mt-0.5">See what customers search for, including zero-result demand.</p>
+              </div>
+              <button onClick={fetchSearchAnalytics} className="text-[9px] uppercase font-bold tracking-widest text-[#a2855b] hover:text-[#7a603c]">
+                Refresh Data
+              </button>
+            </div>
+
+            {loadingSearchAnalytics ? (
+              <div className="bg-white rounded-2xl border border-neutral-100 p-10 text-center text-xs uppercase tracking-widest text-neutral-400 font-bold">
+                Loading search analytics...
+              </div>
+            ) : searchAnalytics.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-neutral-100 p-12 text-center text-neutral-400">
+                <Search size={40} className="mx-auto text-neutral-300 mb-4" />
+                <h4 className="font-serif text-sm font-bold text-neutral-500">No Search Data Yet</h4>
+                <p className="text-[10px] text-neutral-400 font-light mt-1">Customer searches from the collection page will appear here.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-neutral-100 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left">
+                    <thead>
+                      <tr className="bg-neutral-50/70 border-b border-neutral-100 text-[9px] uppercase tracking-widest text-neutral-400 font-bold">
+                        <th className="py-4 px-6">Search Query</th>
+                        <th className="py-4 px-6">Hits</th>
+                        <th className="py-4 px-6">Results</th>
+                        <th className="py-4 px-6">Demand Signal</th>
+                        <th className="py-4 px-6">Last Searched</th>
+                        <th className="py-4 px-6 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-50 text-xs">
+                      {searchAnalytics.map((entry) => (
+                        <tr key={entry._id} className="hover:bg-neutral-50/30">
+                          <td className="py-4 px-6 font-bold text-neutral-950">{entry.query}</td>
+                          <td className="py-4 px-6 font-bold text-neutral-900">{entry.hits}</td>
+                          <td className="py-4 px-6 text-neutral-600">{entry.resultCount}</td>
+                          <td className="py-4 px-6">
+                            <span className={cn(
+                              "rounded-full border px-2.5 py-1 text-[9px] uppercase tracking-wider font-bold",
+                              entry.resultCount === 0
+                                ? "bg-red-50 text-red-600 border-red-100"
+                                : entry.hits >= 3
+                                  ? "bg-green-50 text-green-700 border-green-100"
+                                  : "bg-neutral-50 text-neutral-500 border-neutral-100"
+                            )}>
+                              {entry.resultCount === 0 ? "No matching product" : entry.hits >= 3 ? "High interest" : "Tracked"}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6 text-neutral-400">
+                            {entry.lastSearchedAt ? new Date(entry.lastSearchedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "N/A"}
+                          </td>
+                          <td className="py-4 px-6 text-right">
+                            <button onClick={() => handleDeleteSearchAnalytics(entry._id)} className="p-2 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 cursor-pointer" title="Delete search entry">
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </section>
@@ -1776,9 +3242,483 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
             )}
           </section>
         )}
+
+        {activeTab === "settings" && (
+          <section className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">Store Settings</h4>
+                <p className="text-[10px] text-neutral-450 mt-0.5">Control storefront messages, support contacts, WhatsApp, shipping, and offer details.</p>
+              </div>
+              <div className="rounded-xl bg-neutral-50 border border-neutral-100 px-4 py-3 text-xs text-neutral-500">
+                Changes update the live storefront after save.
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveSettings} className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <div className="xl:col-span-2 space-y-6">
+                <div className="bg-white rounded-2xl border border-neutral-100 shadow-xs p-6 space-y-5">
+                  <div>
+                    <h5 className="font-serif text-sm font-bold text-neutral-950">Store Identity</h5>
+                    <p className="text-[10px] text-neutral-400 mt-1">Basic public-facing store and support information.</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Store Name</span>
+                      <input
+                        name="storeName"
+                        value={settingsForm.storeName}
+                        onChange={handleSettingsChange}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                        placeholder="Saiksha"
+                      />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Support Email</span>
+                      <input
+                        type="email"
+                        name="supportEmail"
+                        value={settingsForm.supportEmail}
+                        onChange={handleSettingsChange}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                        placeholder="support@saiksha.in"
+                      />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">WhatsApp Number</span>
+                      <input
+                        name="whatsappNumber"
+                        value={settingsForm.whatsappNumber}
+                        onChange={handleSettingsChange}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                        placeholder="917383055032"
+                      />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Display Phone</span>
+                      <input
+                        name="supportPhone"
+                        value={settingsForm.supportPhone}
+                        onChange={handleSettingsChange}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                        placeholder="+91 73830 55032"
+                      />
+                    </label>
+                    <label className="space-y-1.5 md:col-span-2">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Instagram URL</span>
+                      <input
+                        type="url"
+                        name="instagramUrl"
+                        value={settingsForm.instagramUrl}
+                        onChange={handleSettingsChange}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                        placeholder="https://www.instagram.com/saiksha.jewels/"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-neutral-100 shadow-xs p-6 space-y-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h5 className="font-serif text-sm font-bold text-neutral-950">Announcement Bar</h5>
+                      <p className="text-[10px] text-neutral-400 mt-1">This is the moving message shown at the top of the website.</p>
+                    </div>
+                    <label className="flex items-center gap-2 text-xs font-bold text-neutral-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="announcementEnabled"
+                        checked={settingsForm.announcementEnabled}
+                        onChange={handleSettingsChange}
+                        className="h-4 w-4 rounded border-neutral-300 text-brand-rosegold focus:ring-brand-rosegold"
+                      />
+                      Enabled
+                    </label>
+                  </div>
+                  <textarea
+                    name="announcementText"
+                    value={settingsForm.announcementText}
+                    onChange={handleSettingsChange}
+                    rows={3}
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm leading-relaxed outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                    placeholder="Free shipping on orders over Rs 5,000 - New Collection just launched - Use code SAIKSHA10 for 10% off"
+                  />
+                </div>
+
+                <div className="bg-white rounded-2xl border border-neutral-100 shadow-xs p-6 space-y-5">
+                  <div>
+                    <h5 className="font-serif text-sm font-bold text-neutral-950">Offers and Policies</h5>
+                    <p className="text-[10px] text-neutral-400 mt-1">Useful values for promotions, shipping, and customer-support copy.</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Free Shipping Threshold</span>
+                      <input
+                        type="number"
+                        min="0"
+                        name="freeShippingThreshold"
+                        value={settingsForm.freeShippingThreshold}
+                        onChange={handleSettingsChange}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                      />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Coupon Code</span>
+                      <input
+                        name="couponCode"
+                        value={settingsForm.couponCode}
+                        onChange={handleSettingsChange}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm uppercase outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                        placeholder="SAIKSHA10"
+                      />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Coupon Discount %</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        name="couponDiscountPercent"
+                        value={settingsForm.couponDiscountPercent}
+                        onChange={handleSettingsChange}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                        placeholder="10"
+                      />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Minimum Order</span>
+                      <input
+                        type="number"
+                        min="0"
+                        name="couponMinOrder"
+                        value={settingsForm.couponMinOrder}
+                        onChange={handleSettingsChange}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                        placeholder="0"
+                      />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Usage Limit</span>
+                      <input
+                        type="number"
+                        min="0"
+                        name="couponUsageLimit"
+                        value={settingsForm.couponUsageLimit}
+                        onChange={handleSettingsChange}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                        placeholder="0 means unlimited"
+                      />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Expiry Date</span>
+                      <input
+                        type="date"
+                        name="couponExpiresAt"
+                        value={settingsForm.couponExpiresAt || ""}
+                        onChange={handleSettingsChange}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                      />
+                    </label>
+                    <label className="space-y-1.5 md:col-span-2">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Coupon Text</span>
+                      <input
+                        name="couponText"
+                        value={settingsForm.couponText}
+                        onChange={handleSettingsChange}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                        placeholder="Use code SAIKSHA10 for 10% off"
+                      />
+                    </label>
+                    <label className="space-y-1.5 md:col-span-2">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Shipping Note</span>
+                      <textarea
+                        name="shippingNote"
+                        value={settingsForm.shippingNote}
+                        onChange={handleSettingsChange}
+                        rows={3}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm leading-relaxed outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                      />
+                    </label>
+                    <label className="space-y-1.5 md:col-span-2">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Return Policy Summary</span>
+                      <textarea
+                        name="returnPolicy"
+                        value={settingsForm.returnPolicy}
+                        onChange={handleSettingsChange}
+                        rows={3}
+                        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm leading-relaxed outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-neutral-100 shadow-xs p-6 space-y-5">
+                  <div>
+                    <h5 className="font-serif text-sm font-bold text-neutral-950">Cart Lead Follow-up Templates</h5>
+                    <p className="text-[10px] text-neutral-400 mt-1">Used by the Cart Leads WhatsApp follow-up buttons. Variables: {"{{name}}"} and {"{{coupon}}"}.</p>
+                  </div>
+                  <div className="space-y-4">
+                    {(settingsForm.cartLeadFollowUpTemplates || []).map((template, index) => (
+                      <div key={index} className="rounded-xl border border-neutral-100 bg-neutral-50/60 p-4 space-y-3">
+                        <input
+                          value={template.title}
+                          onChange={(e) => handleFollowUpTemplateChange(index, "title", e.target.value)}
+                          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs font-bold outline-none focus:border-brand-rosegold"
+                          placeholder="Template title"
+                        />
+                        <textarea
+                          value={template.message}
+                          onChange={(e) => handleFollowUpTemplateChange(index, "message", e.target.value)}
+                          rows={3}
+                          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs leading-relaxed outline-none focus:border-brand-rosegold"
+                          placeholder="WhatsApp message"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <aside className="space-y-6">
+                <div className="bg-neutral-950 text-white rounded-2xl p-6 shadow-xs space-y-5">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-white/45 font-bold">Live Preview</p>
+                    <h5 className="font-serif text-lg font-bold mt-1">{settingsForm.storeName || "Saiksha"}</h5>
+                  </div>
+                  <div className="rounded-xl bg-white/8 border border-white/10 p-4 space-y-2">
+                    <p className="text-[9px] uppercase tracking-widest text-white/45 font-bold">Top Bar</p>
+                    <p className="text-xs leading-relaxed text-white/85">{settingsForm.announcementEnabled ? settingsForm.announcementText : "Announcement hidden"}</p>
+                  </div>
+                  <div className="rounded-xl bg-white/8 border border-white/10 p-4 space-y-2">
+                    <p className="text-[9px] uppercase tracking-widest text-white/45 font-bold">Support</p>
+                    <p className="text-xs text-white/85">{settingsForm.supportPhone}</p>
+                    <p className="text-xs text-white/55">{settingsForm.supportEmail}</p>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingSettings}
+                  className="w-full rounded-xl bg-brand-ink px-5 py-4 text-[10px] uppercase tracking-widest font-bold text-white shadow-lg shadow-brand-ink/10 hover:bg-neutral-800 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {savingSettings ? "Saving Settings..." : "Save Store Settings"}
+                </button>
+              </aside>
+            </form>
+          </section>
+        )}
           </main>
         </div>
       </div>
+
+      {/* Order Detail Drawer */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-[70] flex justify-end">
+          <div className="absolute inset-0 bg-neutral-950/35 backdrop-blur-[1px]" onClick={() => setSelectedOrder(null)} />
+          <aside className="relative h-full w-full max-w-xl bg-white shadow-2xl border-l border-neutral-100 flex flex-col">
+            <div className="p-5 border-b border-neutral-100 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-[2px] text-neutral-400 font-bold">Order Details</p>
+                <h3 className="font-mono text-lg font-bold text-neutral-950">{selectedOrder.orderId}</h3>
+                <p className="text-xs text-neutral-400 mt-1">
+                  {selectedOrder.createdAt
+                    ? new Date(selectedOrder.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+                    : "Date unavailable"}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="p-2 rounded-lg text-neutral-400 hover:text-neutral-900 hover:bg-neutral-50 cursor-pointer"
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+                  <p className="text-[9px] uppercase tracking-wider text-neutral-400 font-bold">Order Total</p>
+                  <p className="text-xl font-serif font-bold text-neutral-950 mt-1">Rs {Number(selectedOrder.total || 0).toLocaleString()}</p>
+                </div>
+                <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+                  <p className="text-[9px] uppercase tracking-wider text-neutral-400 font-bold">Status</p>
+                  <select
+                    value={selectedOrder.status}
+                    onChange={async (e) => {
+                      await handleUpdateOrderStatus(selectedOrder.orderId, e.target.value);
+                      setSelectedOrder((current: any) => current ? { ...current, status: e.target.value } : current);
+                    }}
+                    className="mt-2 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider outline-none cursor-pointer"
+                  >
+                    <option value="Pending">Pending</option>
+                    <option value="Confirmed">Confirmed</option>
+                    <option value="Shipped">Shipped</option>
+                    <option value="Delivered">Delivered</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              <section className="rounded-2xl border border-neutral-100 p-5 space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h4 className="font-serif font-bold text-neutral-950">Customer</h4>
+                    <p className="text-sm font-bold text-neutral-800 mt-1">
+                      {selectedOrder.customer?.firstName} {selectedOrder.customer?.lastName}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-green-50 text-green-700 border border-green-100 px-3 py-1 text-[9px] uppercase tracking-wider font-bold">
+                    {selectedOrder.paymentStatus || "Pending"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-neutral-600">
+                  <a href={`mailto:${selectedOrder.customer?.email}`} className="flex items-center gap-2 rounded-xl bg-neutral-50 p-3 hover:bg-neutral-100">
+                    <Mail size={14} className="text-neutral-400" />
+                    <span className="truncate">{selectedOrder.customer?.email}</span>
+                  </a>
+                  <a
+                    href={`https://wa.me/91${String(selectedOrder.customer?.phone || "").replace(/\D/g, "")}?text=${encodeURIComponent(`Hello ${selectedOrder.customer?.firstName || ""}, regarding your Saiksha order ${selectedOrder.orderId}.`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 rounded-xl bg-green-50 p-3 hover:bg-green-100 text-green-700"
+                  >
+                    <Phone size={14} />
+                    <span>{selectedOrder.customer?.phone}</span>
+                  </a>
+                </div>
+
+                {selectedOrder.customer?.secondaryPhone && (
+                  <p className="text-xs text-neutral-500 flex items-center gap-2">
+                    <Phone size={13} className="text-neutral-400" />
+                    Secondary: {selectedOrder.customer.secondaryPhone}
+                  </p>
+                )}
+              </section>
+
+              <section className="rounded-2xl border border-neutral-100 p-5 space-y-3">
+                <h4 className="font-serif font-bold text-neutral-950">Delivery Address</h4>
+                <p className="text-xs text-neutral-500 leading-relaxed">
+                  {selectedOrder.customer?.address}<br />
+                  {selectedOrder.customer?.city} - {selectedOrder.customer?.postalCode}
+                </p>
+              </section>
+
+              <section className="rounded-2xl border border-neutral-100 p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-serif font-bold text-neutral-950">Items</h4>
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400 font-bold">
+                    {selectedOrder.items?.length || 0} pieces
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {(selectedOrder.items || []).map((item: any) => (
+                    <div key={`${selectedOrder.orderId}-${item.id}-${item.name}`} className="flex items-center gap-3 rounded-xl bg-neutral-50 p-3">
+                      <div className="h-14 w-12 rounded-lg overflow-hidden bg-white border border-neutral-100 shrink-0">
+                        <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-neutral-900 truncate">{item.name}</p>
+                        <p className="text-[10px] text-neutral-400">ID: {item.id} · Qty {item.quantity}</p>
+                      </div>
+                      <p className="text-xs font-bold text-neutral-950">Rs {Number(item.price || 0).toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-neutral-100 p-5 space-y-3">
+                <h4 className="font-serif font-bold text-neutral-950">Payment & Totals</h4>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between text-neutral-500">
+                    <span>Payment Method</span>
+                    <span className="font-bold text-neutral-900">{selectedOrder.paymentMethod}</span>
+                  </div>
+                  <div className="flex justify-between text-neutral-500">
+                    <span>Subtotal</span>
+                    <span className="font-bold text-neutral-900">Rs {Number(selectedOrder.subTotal || 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-neutral-500">
+                    <span>Shipping</span>
+                    <span className="font-bold text-green-600">{selectedOrder.shipping === 0 ? "FREE" : `Rs ${Number(selectedOrder.shipping || 0).toLocaleString()}`}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-neutral-100 pt-3 text-sm">
+                    <span className="font-bold text-neutral-950">Grand Total</span>
+                    <span className="font-bold text-neutral-950">Rs {Number(selectedOrder.total || 0).toLocaleString()}</span>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-neutral-100 p-5 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="font-serif font-bold text-neutral-950">Refunds & Returns</h4>
+                    <p className="text-[10px] text-neutral-400">Track refund/return state for this order.</p>
+                  </div>
+                  <button
+                    onClick={() => handleUpdateRefund(selectedOrder.orderId)}
+                    className="rounded-lg bg-neutral-950 px-3 py-2 text-[9px] uppercase tracking-wider font-bold text-white cursor-pointer"
+                  >
+                    Update
+                  </button>
+                </div>
+                <div className="rounded-xl bg-neutral-50 border border-neutral-100 p-4 text-xs space-y-1">
+                  <p><span className="font-bold text-neutral-950">Status:</span> {selectedOrder.refund?.status || "None"}</p>
+                  <p><span className="font-bold text-neutral-950">Amount:</span> Rs {Number(selectedOrder.refund?.amount || 0).toLocaleString()}</p>
+                  {selectedOrder.refund?.reason && <p className="text-neutral-500">{selectedOrder.refund.reason}</p>}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-neutral-100 p-5 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="font-serif font-bold text-neutral-950">Order Timeline</h4>
+                    <p className="text-[10px] text-neutral-400">Private order activity and fulfillment notes.</p>
+                  </div>
+                  <button
+                    onClick={() => handleAddOrderTimeline(selectedOrder.orderId)}
+                    className="rounded-lg border border-neutral-200 px-3 py-2 text-[9px] uppercase tracking-wider font-bold text-neutral-600 cursor-pointer"
+                  >
+                    Add Note
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {(selectedOrder.timeline || []).length === 0 ? (
+                    <p className="text-xs text-neutral-400">No timeline notes yet.</p>
+                  ) : selectedOrder.timeline.map((entry: any, index: number) => (
+                    <div key={`${entry.title}-${index}`} className="border-l-2 border-brand-rosegold/30 pl-3 text-xs">
+                      <p className="font-bold text-neutral-900">{entry.title}</p>
+                      {entry.note && <p className="text-neutral-500 mt-0.5">{entry.note}</p>}
+                      <p className="text-[10px] text-neutral-400 mt-1">
+                        {entry.createdAt ? new Date(entry.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : ""}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+
+            <div className="p-5 border-t border-neutral-100 flex gap-3">
+              <button
+                onClick={() => {
+                  setSelectedOrder(null);
+                  handleDeleteOrder(selectedOrder.orderId);
+                }}
+                className="flex-1 rounded-xl border border-red-100 bg-red-50 py-3 text-[10px] uppercase tracking-widest font-bold text-red-600 hover:bg-red-100 cursor-pointer"
+              >
+                Delete Order
+              </button>
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="flex-1 rounded-xl bg-brand-ink py-3 text-[10px] uppercase tracking-widest font-bold text-white hover:bg-neutral-800 cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
 
       {/* Add / Edit Product Modal Form */}
       {isModalOpen && (
@@ -2042,6 +3982,18 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                       className="w-full px-3 py-2.5 rounded-lg border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-brand-rosegold font-mono"
                     />
                   </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-neutral-500">Product Variants (Name | Value | Price | Stock)</label>
+                  <textarea
+                    rows={3}
+                    name="variantsText"
+                    value={formData.variantsText}
+                    onChange={handleFormChange}
+                    placeholder={"Metal | Rose Gold | 1890 | 8\nMetal | Silver | 1790 | 10\nSize | Adjustable | | 5"}
+                    className="w-full px-3 py-2.5 rounded-lg border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-brand-rosegold font-mono"
+                  />
                 </div>
               </div>
 

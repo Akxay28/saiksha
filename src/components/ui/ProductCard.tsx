@@ -43,6 +43,7 @@ export default function ProductCard({ product, className }: ProductCardProps) {
   };
 
   const isOutOfStock = product.stock <= 0;
+  const isLowStock = product.stock > 0 && product.stock <= 5;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -198,6 +199,11 @@ export default function ProductCard({ product, className }: ProductCardProps) {
               Sale
             </span>
           )}
+          {isLowStock && (
+            <span className="bg-red-500 text-white text-[8px] px-2.5 py-1 uppercase tracking-[2px] font-bold shadow-sm rounded-sm">
+              Only {product.stock} left
+            </span>
+          )}
         </div>
       </div>
 
@@ -234,6 +240,11 @@ export default function ProductCard({ product, className }: ProductCardProps) {
             <Eye size={12} className="text-[#a2855b]" />
             <span>{product.views?.toLocaleString()} viewed this piece</span>
           </div>
+        )}
+        {isLowStock && (
+          <p className="text-[10px] uppercase tracking-widest text-red-500 font-bold">
+            Selling fast
+          </p>
         )}
       </div>
     </motion.div>

@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   Eye
+  , MessageCircle, Bell, BadgePercent
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { categorySpecifications } from "../data/categorySpecifications";
@@ -30,9 +31,12 @@ import { cn } from "../lib/utils";
 import { useCart } from "../context/CartContext";
 import { useWishlist } from "../context/WishlistContext";
 import { toast } from "sonner";
+import { useStoreSettings } from "../context/StoreSettingsContext";
+import { applySeo, getSiteUrl, organizationJsonLd } from "../lib/seo";
 
 import Testimonials from "../components/sections/Testimonials";
 import TrustSection from "../components/sections/TrustSection";
+import RecentlyViewedProducts from "../components/sections/RecentlyViewedProducts";
 
 export default function ProductDetail() {
   const { products, recordProductView } = useProducts();
@@ -40,12 +44,18 @@ export default function ProductDetail() {
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
+  const { settings } = useStoreSettings();
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState("Standard");
   const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [productViewCount, setProductViewCount] = useState<number | null>(null);
+  const [leadModalType, setLeadModalType] = useState<"Product Inquiry" | "Notify Me" | "Price Drop Alert" | null>(null);
+  const [leadName, setLeadName] = useState("");
+  const [leadEmail, setLeadEmail] = useState("");
+  const [leadPhone, setLeadPhone] = useState("");
+  const [isSavingLead, setIsSavingLead] = useState(false);
 
   // Experience modal form states
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -83,6 +93,55 @@ export default function ProductDetail() {
       isMounted = false;
     };
   }, [id, product?.id, product?.views, recordProductView]);
+
+  useEffect(() => {
+    if (!product || typeof window === "undefined") return;
+    const key = "saiksha-recently-viewed";
+    const current = JSON.parse(localStorage.getItem(key) || "[]") as string[];
+    const next = [product.id, ...current.filter((itemId) => itemId !== product.id)].slice(0, 8);
+    localStorage.setItem(key, JSON.stringify(next));
+  }, [product?.id]);
+
+  useEffect(() => {
+    if (!product) return;
+    const price = product.isSale && product.salePrice ? product.salePrice : product.price;
+    const image = product.images[0]?.startsWith("http") ? product.images[0] : `${getSiteUrl()}${product.images[0] || ""}`;
+    applySeo({
+      title: `${product.name} | ${product.category} by Saiksha`,
+      description: `${product.description.slice(0, 150)} Shop ${product.category.toLowerCase()} with secure checkout and WhatsApp support across India.`,
+      path: `/product/${product.id}`,
+      image,
+      type: "product",
+      structuredData: [
+        organizationJsonLd(settings),
+        {
+          "@context": "https://schema.org",
+          "@type": "Product",
+          name: product.name,
+          description: product.description,
+          image: product.images,
+          sku: `SAIKSHA-${product.id}`,
+          brand: {
+            "@type": "Brand",
+            name: settings.storeName || "Saiksha"
+          },
+          category: product.category,
+          aggregateRating: product.reviews > 0 ? {
+            "@type": "AggregateRating",
+            ratingValue: product.rating,
+            reviewCount: product.reviews
+          } : undefined,
+          offers: {
+            "@type": "Offer",
+            priceCurrency: "INR",
+            price,
+            availability: product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+            url: `${getSiteUrl()}/product/${product.id}`
+          }
+        }
+      ]
+    });
+  }, [product?.id, product?.views, settings.storeName, settings.supportEmail, settings.whatsappNumber, settings.instagramUrl]);
 
   if (!product) {
     return (
@@ -173,6 +232,42 @@ export default function ProductDetail() {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const saveProductLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leadModalType) return;
+    setIsSavingLead(true);
+    try {
+      const response = await fetch("/api/lead-captures", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: leadModalType,
+          customer: { name: leadName, email: leadEmail, phone: leadPhone },
+          product: {
+            id: product.id,
+            name: product.name,
+            price: product.isSale && product.salePrice ? product.salePrice : product.price,
+            image: product.images[0]
+          },
+          message: `${leadModalType} for ${product.name}`
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not save lead");
+      toast.success("Thanks. Saiksha will follow up with you.");
+      setLeadModalType(null);
+      setLeadName("");
+      setLeadEmail("");
+      setLeadPhone("");
+    } catch (error: any) {
+      toast.error(error.message || "Could not save your details.");
+    } finally {
+      setIsSavingLead(false);
+    }
+  };
+
+  const productWhatsAppUrl = `https://wa.me/${settings.whatsappNumber}?text=${encodeURIComponent(`Hello ${settings.storeName}, I want to ask about ${product.name}: ${typeof window !== "undefined" ? window.location.href : ""}`)}`;
+
   const nextImage = () => {
     if (product.images && product.images.length > 0) {
       setActiveImage((prev) => (prev + 1) % product.images.length);
@@ -201,6 +296,9 @@ export default function ProductDetail() {
   };
 
   const relatedProducts = products.filter(p => p.id !== id && p.category === product.category).slice(0, 4);
+  const frequentlyBoughtTogether = products
+    .filter((p) => p.id !== id && p.stock > 0 && p.category !== product.category)
+    .slice(0, 2);
 
   return (
     <div className="pb-0 bg-white">
@@ -482,6 +580,35 @@ export default function ProductDetail() {
                   <span>{isLiked ? "In Your Favorites" : "Add to Favorites Library"}</span>
                 </button>
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <a
+                  href={productWhatsAppUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setLeadModalType("Product Inquiry")}
+                  className="flex items-center justify-center gap-2 rounded-sm border border-green-100 bg-green-50 px-3 py-3 text-[9px] uppercase tracking-widest font-bold text-green-700 hover:bg-green-100"
+                >
+                  <MessageCircle size={14} />
+                  Ask on WhatsApp
+                </a>
+                {product.stock === 0 && (
+                  <button
+                    onClick={() => setLeadModalType("Notify Me")}
+                    className="flex items-center justify-center gap-2 rounded-sm border border-neutral-200 bg-white px-3 py-3 text-[9px] uppercase tracking-widest font-bold text-neutral-700 hover:border-brand-rosegold"
+                  >
+                    <Bell size={14} />
+                    Notify Me
+                  </button>
+                )}
+                <button
+                  onClick={() => setLeadModalType("Price Drop Alert")}
+                  className="flex items-center justify-center gap-2 rounded-sm border border-brand-rosegold/20 bg-brand-cream/30 px-3 py-3 text-[9px] uppercase tracking-widest font-bold text-[#7a603c] hover:border-brand-rosegold"
+                >
+                  <BadgePercent size={14} />
+                  Price Alert
+                </button>
+              </div>
             </div>
           </div>
 
@@ -524,6 +651,45 @@ export default function ProductDetail() {
                     </button>
                   </div>
                 </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {leadModalType && (
+              <div className="fixed inset-0 z-[110] flex items-center justify-center px-6">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setLeadModalType(null)}
+                  className="absolute inset-0 bg-brand-ink/40 backdrop-blur-sm"
+                />
+                <motion.form
+                  onSubmit={saveProductLead}
+                  initial={{ opacity: 0, scale: 0.92, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.92, y: 20 }}
+                  className="relative w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl border border-black/5 space-y-5"
+                >
+                  <div className="space-y-1">
+                    <h3 className="text-xl font-serif text-brand-ink">{leadModalType}</h3>
+                    <p className="text-xs text-neutral-500 leading-relaxed">
+                      Share your details for {product.name}. Saiksha will help you personally.
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <input value={leadName} onChange={(e) => setLeadName(e.target.value)} placeholder="Full name" className="w-full rounded-lg border border-neutral-200 px-4 py-3 text-xs outline-none focus:border-brand-rosegold" />
+                    <input type="email" value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)} placeholder="Email address" className="w-full rounded-lg border border-neutral-200 px-4 py-3 text-xs outline-none focus:border-brand-rosegold" />
+                    <input type="tel" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="Mobile number" className="w-full rounded-lg border border-neutral-200 px-4 py-3 text-xs outline-none focus:border-brand-rosegold" />
+                  </div>
+                  <div className="flex gap-3">
+                    <button type="button" onClick={() => setLeadModalType(null)} className="flex-1 rounded-lg border border-neutral-200 py-3 text-[10px] uppercase tracking-widest font-bold text-neutral-500">Cancel</button>
+                    <button type="submit" disabled={isSavingLead} className="flex-1 rounded-lg bg-brand-ink py-3 text-[10px] uppercase tracking-widest font-bold text-white disabled:opacity-60">
+                      {isSavingLead ? "Saving..." : "Submit"}
+                    </button>
+                  </div>
+                </motion.form>
               </div>
             )}
           </AnimatePresence>
@@ -692,7 +858,44 @@ export default function ProductDetail() {
         </div>
       </section>
 
+      {frequentlyBoughtTogether.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 md:px-8 mt-28">
+          <div className="rounded-2xl border border-brand-rosegold/20 bg-brand-cream/25 p-6 md:p-8">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+              <div>
+                <p className="text-[10px] uppercase tracking-[3px] text-brand-rosegold font-bold">Frequently Bought Together</p>
+                <h2 className="mt-2 text-2xl font-serif text-brand-ink">Complete the look in one tap</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  addToCart(product);
+                  frequentlyBoughtTogether.forEach((item) => addToCart(item));
+                }}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-ink px-5 py-3 text-[10px] uppercase tracking-widest font-bold text-white hover:bg-neutral-800"
+              >
+                <ShoppingBag size={14} />
+                Add Full Set
+              </button>
+            </div>
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-5">
+              {[product, ...frequentlyBoughtTogether].map((item) => (
+                <div key={item.id} className="flex items-center gap-4 rounded-xl bg-white p-4 border border-black/5">
+                  <img src={item.images[0]} alt={item.name} referrerPolicy="no-referrer" className="h-20 w-16 rounded object-cover bg-brand-cream" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-brand-ink line-clamp-2">{item.name}</p>
+                    <p className="mt-1 text-[10px] uppercase tracking-widest text-neutral-400">{item.category}</p>
+                    <p className="mt-1 text-xs font-serif text-brand-ink">Rs {(item.isSale && item.salePrice ? item.salePrice : item.price).toLocaleString()}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       <TrustSection />
+      <RecentlyViewedProducts />
 
       {/* Experience Feedback Modal */}
       <AnimatePresence>

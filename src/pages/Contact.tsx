@@ -1,28 +1,5 @@
 import { Instagram, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
-
-const contactOptions = [
-  {
-    icon: MessageCircle,
-    title: "WhatsApp support",
-    text: "Fastest for product questions, order help, styling, and gifting guidance.",
-    action: "Chat on WhatsApp",
-    href: "https://wa.me/916351357299?text=Hello%20Saiksha%2C%20I%20need%20help%20with%20your%20jewelry%20collection.",
-  },
-  {
-    icon: Instagram,
-    title: "Instagram",
-    text: "Follow launches, customer styling, and quick collection updates.",
-    action: "@saiksha.jewels",
-    href: "https://www.instagram.com/saiksha.jewels/",
-  },
-  {
-    icon: Phone,
-    title: "Phone",
-    text: "For urgent order support, call or message during business hours.",
-    action: "+91 63513 57299",
-    href: "tel:+916351357299",
-  },
-];
+import { useStoreSettings } from "../context/StoreSettingsContext";
 
 const faqs = [
   {
@@ -40,6 +17,33 @@ const faqs = [
 ];
 
 export default function Contact() {
+  const { settings } = useStoreSettings();
+  const whatsappText = encodeURIComponent(`Hello ${settings.storeName}, I need help with your jewelry collection.`);
+  const dialNumber = settings.whatsappNumber.replace(/\D/g, "");
+  const contactOptions = [
+    {
+      icon: MessageCircle,
+      title: "WhatsApp support",
+      text: "Fastest for product questions, order help, styling, and gifting guidance.",
+      action: "Chat on WhatsApp",
+      href: `https://wa.me/${settings.whatsappNumber}?text=${whatsappText}`,
+    },
+    {
+      icon: Instagram,
+      title: "Instagram",
+      text: "Follow launches, customer styling, and quick collection updates.",
+      action: "@saiksha.jewels",
+      href: settings.instagramUrl,
+    },
+    {
+      icon: Phone,
+      title: "Phone",
+      text: "For urgent order support, call or message during business hours.",
+      action: settings.supportPhone,
+      href: `tel:+${dialNumber}`,
+    },
+  ];
+
   return (
     <div className="bg-white">
       <section className="bg-brand-cream/35">
@@ -63,7 +67,7 @@ export default function Contact() {
               <MapPin className="text-brand-rosegold mt-1" size={22} />
               <div>
                 <h3 className="text-[10px] uppercase tracking-[3px] font-bold text-neutral-400">Service Area</h3>
-                <p className="text-sm text-neutral-600 mt-1">Online jewelry orders and customer support across India.</p>
+                <p className="text-sm text-neutral-600 mt-1">{settings.shippingNote}</p>
               </div>
             </div>
           </div>

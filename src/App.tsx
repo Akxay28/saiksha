@@ -9,17 +9,22 @@ import { cn } from "./lib/utils";
 import { CartProvider } from "./context/CartContext";
 import { WishlistProvider } from "./context/WishlistContext";
 import { ProductProvider } from "./context/ProductContext";
+import { StoreSettingsProvider, useStoreSettings } from "./context/StoreSettingsContext";
+import { DiscountCampaignProvider, useDiscountCampaigns } from "./context/DiscountCampaignContext";
+import { CustomerAuthProvider } from "./context/CustomerAuthContext";
 
 // Components
 import Navbar from "./components/layout/Navbar";
 import Footer from "./components/layout/Footer";
 import GlobalBottomSections from "./components/sections/GlobalBottomSections";
+import LeadCaptureOffer from "./components/lead/LeadCaptureOffer";
 import Home from "./pages/Home";
 import Products from "./pages/Products";
 import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
 import Wishlist from "./pages/Wishlist";
 import Checkout from "./pages/Checkout";
+import Account from "./pages/Account";
 import Auth from "./pages/Auth";
 import AdminDashboard from "./pages/AdminDashboard";
 import Testimonials from "./pages/Testimonials";
@@ -30,12 +35,89 @@ import FAQ from "./pages/FAQ";
 import NotFound from "./pages/NotFound";
 import Privacy from "./pages/Privacy";
 import Shipping from "./pages/Shipping";
+import { applySeo, getSiteUrl, organizationJsonLd } from "./lib/seo";
 
 function ScrollToTop() {
   const { pathname, search } = useLocation();
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [pathname, search]);
+  return null;
+}
+
+function GlobalSeo() {
+  const { pathname } = useLocation();
+  const { settings } = useStoreSettings();
+
+  useEffect(() => {
+    const privatePaths = ["/login", "/register", "/account", "/checkout", "/cart", "/wishlist"];
+    if (privatePaths.some((path) => pathname.startsWith(path))) {
+      applySeo({
+        title: "Saiksha Customer Area",
+        description: "Secure customer area for Saiksha account, cart, wishlist, and checkout.",
+        path: pathname,
+        noIndex: true
+      });
+      return;
+    }
+
+    const pageSeo: Record<string, { title: string; description: string }> = {
+      "/": {
+        title: "Saiksha | Handcrafted Luxury Jewelry",
+        description: "Shop handcrafted earrings, necklaces, bestsellers, and gift-ready jewelry from Saiksha with secure checkout and WhatsApp support across India."
+      },
+      "/about": {
+        title: "About Saiksha | Handcrafted Jewelry Brand",
+        description: "Learn about Saiksha, a handcrafted jewelry store focused on elegant earrings, necklaces, gift-ready pieces, careful packaging, and customer support across India."
+      },
+      "/contact": {
+        title: "Contact Saiksha | WhatsApp Jewelry Support",
+        description: "Contact Saiksha for jewelry styling help, order support, gifting guidance, and WhatsApp assistance before or after checkout."
+      },
+      "/shipping": {
+        title: "Shipping, Returns & Exchange Policy | Saiksha",
+        description: "Read Saiksha shipping, delivery, return, and exchange guidance for handcrafted jewelry orders across India."
+      },
+      "/faq": {
+        title: "Jewelry Shopping FAQs | Saiksha",
+        description: "Find answers about Saiksha jewelry ordering, materials, care, shipping, returns, reviews, and customer support."
+      },
+      "/testimonials": {
+        title: "Customer Reviews | Saiksha Jewelry",
+        description: "Read Saiksha customer reviews and verified jewelry experiences from shoppers across India."
+      },
+      "/care-guide": {
+        title: "Jewelry Care Guide | Saiksha",
+        description: "Learn how to care for Saiksha earrings, necklaces, and handcrafted jewelry so each piece stays beautiful for longer."
+      },
+      "/privacy": {
+        title: "Privacy Policy | Saiksha",
+        description: "Read how Saiksha handles customer information, checkout data, analytics, and privacy choices."
+      }
+    };
+    const currentSeo = pageSeo[pathname] || pageSeo["/"];
+
+    applySeo({
+      title: currentSeo.title,
+      description: currentSeo.description,
+      path: pathname,
+      structuredData: [
+        organizationJsonLd(settings),
+        {
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          name: settings.storeName || "Saiksha",
+          url: getSiteUrl(),
+          potentialAction: {
+            "@type": "SearchAction",
+            target: `${getSiteUrl()}/collection?search={search_term_string}`,
+            "query-input": "required name=search_term_string"
+          }
+        }
+      ]
+    });
+  }, [pathname, settings.storeName, settings.supportEmail, settings.whatsappNumber, settings.instagramUrl]);
+
   return null;
 }
 
@@ -50,24 +132,34 @@ export default function App() {
 
   if (showAdmin) {
     return (
-      <ProductProvider>
-        <Toaster position="bottom-right" richColors toastOptions={{
-          style: {
-            fontFamily: "var(--font-sans)",
-            borderRadius: "4px",
-          }
-        }} />
-        <AdminDashboard onClose={() => setShowAdmin(false)} />
-      </ProductProvider>
+      <StoreSettingsProvider>
+        <ProductProvider>
+          <DiscountCampaignProvider>
+            <CustomerAuthProvider>
+              <Toaster position="bottom-right" richColors toastOptions={{
+                style: {
+                  fontFamily: "var(--font-sans)",
+                  borderRadius: "4px",
+                }
+              }} />
+              <AdminDashboard onClose={() => setShowAdmin(false)} />
+            </CustomerAuthProvider>
+          </DiscountCampaignProvider>
+        </ProductProvider>
+      </StoreSettingsProvider>
     );
   }
 
   return (
     <Router>
-      <ProductProvider>
-        <CartProvider>
-          <WishlistProvider>
+      <StoreSettingsProvider>
+        <ProductProvider>
+          <DiscountCampaignProvider>
+            <CustomerAuthProvider>
+              <CartProvider>
+                <WishlistProvider>
             <ScrollToTop />
+            <GlobalSeo />
             <Toaster position="bottom-right" richColors toastOptions={{
               style: {
                 fontFamily: "var(--font-sans)",
@@ -77,6 +169,7 @@ export default function App() {
             <div className="min-h-screen flex flex-col font-sans selection:bg-brand-blush">
               <AnnouncementBar />
               <Navbar />
+              <CampaignStrip />
               
               <main className="flex-grow">
                 <Routes>
@@ -86,6 +179,7 @@ export default function App() {
                   <Route path="/cart" element={<Cart />} />
                   <Route path="/wishlist" element={<Wishlist />} />
                   <Route path="/checkout" element={<Checkout />} />
+                  <Route path="/account" element={<Account />} />
                   <Route path="/login" element={<Auth mode="login" />} />
                   <Route path="/register" element={<Auth mode="register" />} />
                   <Route path="/testimonials" element={<Testimonials />} />
@@ -99,18 +193,40 @@ export default function App() {
                 </Routes>
               </main>
 
-              <GlobalBottomSections />
-              <Footer />
-              <WhatsAppButton />
-            </div>
-          </WishlistProvider>
-        </CartProvider>
-      </ProductProvider>
+                <GlobalBottomSections />
+                <Footer />
+                <WhatsAppButton />
+                <LeadCaptureOffer />
+              </div>
+                </WishlistProvider>
+              </CartProvider>
+            </CustomerAuthProvider>
+          </DiscountCampaignProvider>
+        </ProductProvider>
+      </StoreSettingsProvider>
     </Router>
   );
 }
 
+function CampaignStrip() {
+  const { campaigns } = useDiscountCampaigns();
+  const campaign = campaigns[0];
+  if (!campaign) return null;
+
+  return (
+    <Link
+      to="/collection"
+      className="block border-b border-brand-rosegold/20 bg-brand-cream/40 px-4 py-2 text-center text-[10px] uppercase tracking-[2px] font-bold text-[#7a603c] hover:bg-brand-cream/70"
+    >
+      {campaign.badgeText || campaign.title}
+    </Link>
+  );
+}
+
 function AnnouncementBar() {
+  const { settings } = useStoreSettings();
+  if (!settings.announcementEnabled || !settings.announcementText.trim()) return null;
+
   return (
     <div className="bg-neutral-900 text-white py-2 overflow-hidden whitespace-nowrap">
       <motion.div
@@ -118,15 +234,16 @@ function AnnouncementBar() {
         transition={{ repeat: Infinity, duration: 20, ease: "linear" }}
         className="inline-block text-xs uppercase tracking-widest font-medium"
       >
-        ✨ Free shipping on orders over ₹5,000 • New Collection just launched • Use code SAIKSHA10 for 10% off ✨
+        {settings.announcementText}
       </motion.div>
     </div>
   );
 }
 
 function WhatsAppButton() {
-  const phoneNumber = "917383055032";
-  const message = "Hello Saiksha, I would like to inquire about your jewelry collection.";
+  const { settings } = useStoreSettings();
+  const phoneNumber = settings.whatsappNumber || "917383055032";
+  const message = `Hello ${settings.storeName || "Saiksha"}, I would like to inquire about your jewelry collection.`;
   const encodedMessage = encodeURIComponent(message);
   
   return (

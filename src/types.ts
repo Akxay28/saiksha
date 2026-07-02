@@ -25,6 +25,18 @@ export interface Product {
   shippingRoute?: string;
   exchangePolicy?: string;
   views?: number;
+  variants?: Array<{
+    name: string;
+    value: string;
+    price?: number;
+    stock?: number;
+  }>;
+  inventoryHistory?: Array<{
+    change: number;
+    stockAfter: number;
+    note: string;
+    createdAt: string;
+  }>;
 }
 
 export interface CartItem extends Product {

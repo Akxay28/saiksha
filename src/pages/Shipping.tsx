@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Clock, PackageCheck, RefreshCw, ShieldCheck, Truck } from "lucide-react";
+import { useStoreSettings } from "../context/StoreSettingsContext";
 
 const timeline = [
   {
@@ -39,6 +40,23 @@ const policies = [
 ];
 
 export default function Shipping() {
+  const { settings } = useStoreSettings();
+  const freeShippingThreshold = Math.max(0, Number(settings.freeShippingThreshold || 0));
+  const policiesWithSettings = policies.map((policy) => {
+    if (policy.title === "Shipping charges") {
+      return {
+        ...policy,
+        text: freeShippingThreshold > 0
+          ? `Free shipping is available on orders from Rs ${freeShippingThreshold.toLocaleString()}. ${settings.shippingNote}`
+          : settings.shippingNote
+      };
+    }
+    if (policy.title === "Returns and exchanges") {
+      return { ...policy, text: settings.returnPolicy };
+    }
+    return policy;
+  });
+
   return (
     <div className="bg-white">
       <section className="max-w-7xl mx-auto px-6 md:px-10 py-24 lg:py-32 grid lg:grid-cols-2 gap-14 items-center">
@@ -79,7 +97,7 @@ export default function Shipping() {
           <span className="text-[10px] uppercase tracking-[4px] font-bold">Policy Notes</span>
         </div>
         <div className="grid md:grid-cols-2 gap-6">
-          {policies.map((policy) => (
+          {policiesWithSettings.map((policy) => (
             <div key={policy.title} className="border border-black/5 p-7 rounded-sm space-y-3">
               <h2 className="font-serif text-xl text-brand-ink">{policy.title}</h2>
               <p className="text-sm text-neutral-500 font-light leading-relaxed">{policy.text}</p>

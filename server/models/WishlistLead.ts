@@ -1,28 +1,26 @@
 import mongoose, { Model, Schema } from "mongoose";
 
-export interface IAbandonedCartItem {
+export interface IWishlistLeadItem {
   id: string;
   name: string;
   price: number;
-  quantity: number;
   image: string;
 }
 
-export interface IAbandonedCart {
+export interface IWishlistLead {
   sessionId: string;
   customer: {
     name: string;
     email: string;
     phone: string;
   };
-  items: IAbandonedCartItem[];
-  total: number;
+  items: IWishlistLeadItem[];
   status: "Open" | "Contacted" | "Converted";
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-const AbandonedCartSchema: Schema = new Schema(
+const WishlistLeadSchema: Schema = new Schema(
   {
     sessionId: { type: String, required: true, unique: true },
     customer: {
@@ -35,20 +33,16 @@ const AbandonedCartSchema: Schema = new Schema(
         id: { type: String, required: true },
         name: { type: String, required: true },
         price: { type: Number, required: true },
-        quantity: { type: Number, required: true },
         image: { type: String, required: true }
       }
     ],
-    total: { type: Number, required: true },
     status: { type: String, default: "Open" }
   },
-  {
-    timestamps: true
-  }
+  { timestamps: true }
 );
 
-const AbandonedCartModel =
-  (mongoose.models.AbandonedCart as Model<IAbandonedCart> | undefined) ||
-  mongoose.model<IAbandonedCart>("AbandonedCart", AbandonedCartSchema);
+const WishlistLeadModel =
+  (mongoose.models.WishlistLead as Model<IWishlistLead> | undefined) ||
+  mongoose.model<IWishlistLead>("WishlistLead", WishlistLeadSchema);
 
-export default AbandonedCartModel;
+export default WishlistLeadModel;
