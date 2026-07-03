@@ -22,6 +22,8 @@ import DiscountCampaign from "./server/models/DiscountCampaign";
 import WhatsAppCampaign from "./server/models/WhatsAppCampaign";
 import CustomerAccount from "./server/models/CustomerAccount";
 import HappyCustomer from "./server/models/HappyCustomer";
+import MetaAd from "./server/models/MetaAd";
+import MetaEvent from "./server/models/MetaEvent";
 import dns from "dns";
 import crypto from "crypto";
 
@@ -127,6 +129,21 @@ function getSiteOrigin(req: Request) {
   }
 
   return `${req.protocol}://${req.get("host")}`.replace(/\/+$/, "");
+}
+
+function absoluteUrl(req: Request, value: string) {
+  const trimmed = String(value || "").trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (!trimmed) return getSiteOrigin(req);
+  return `${getSiteOrigin(req)}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
+}
+
+function productLandingUrl(req: Request, productId: string, source = "meta_ads") {
+  const url = new URL(`${getSiteOrigin(req)}/product/${encodeURIComponent(productId)}`);
+  url.searchParams.set("utm_source", source);
+  url.searchParams.set("utm_medium", "paid_social");
+  url.searchParams.set("utm_campaign", "meta_product_ad");
+  return url.toString();
 }
 
 function escapeXml(value: string) {
@@ -521,9 +538,9 @@ async function startServer() {
       useDefaults: true,
       directives: {
         "default-src": ["'self'"],
-        "script-src": ["'self'", "'unsafe-inline'", "https://www.googletagmanager.com", "https://www.google-analytics.com", "https://checkout.razorpay.com"],
-        "connect-src": ["'self'", "https://www.google-analytics.com", "https://www.googletagmanager.com", "https://checkout.razorpay.com", "https://api.razorpay.com"],
-        "img-src": ["'self'", "data:", "blob:", "https:"],
+        "script-src": ["'self'", "'unsafe-inline'", "https://www.googletagmanager.com", "https://www.google-analytics.com", "https://checkout.razorpay.com", "https://connect.facebook.net"],
+        "connect-src": ["'self'", "https://www.google-analytics.com", "https://www.googletagmanager.com", "https://checkout.razorpay.com", "https://api.razorpay.com", "https://www.facebook.com", "https://connect.facebook.net"],
+        "img-src": ["'self'", "data:", "blob:", "https:", "https://www.facebook.com"],
         "style-src": ["'self'", "'unsafe-inline'"],
         "frame-src": ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com"],
         "object-src": ["'none'"],
@@ -586,6 +603,37 @@ async function startServer() {
     }
   });
 
+  app.get("/meta-product-feed.csv", async (req: Request, res: Response) => {
+    try {
+      const products = await Product.find({}).sort({ createdAt: -1 }).lean();
+      const rows = [
+        ["id", "title", "description", "availability", "condition", "price", "link", "image_link", "brand", "google_product_category", "product_type"],
+        ...products
+          .filter((product: any) => product.id && product.name)
+          .map((product: any) => {
+            const price = Number(product.isSale && product.salePrice ? product.salePrice : product.price || 0);
+            return [
+              `SAIKSHA-${product.id}`,
+              product.name,
+              product.description || product.name,
+              Number(product.stock || 0) > 0 ? "in stock" : "out of stock",
+              "new",
+              `${price.toFixed(2)} INR`,
+              productLandingUrl(req, product.id, "meta_catalog"),
+              absoluteUrl(req, product.images?.[0] || ""),
+              "Saiksha",
+              "Apparel & Accessories > Jewelry",
+              product.category || "Jewelry"
+            ];
+          })
+      ];
+      sendCsv(res, "saiksha-meta-product-feed.csv", rows);
+    } catch (error) {
+      console.error("Error generating Meta product feed:", error);
+      res.status(500).send("Failed to generate product feed");
+    }
+  });
+
   app.get("/api/products/:id", async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
@@ -597,6 +645,38 @@ async function startServer() {
     } catch (error) {
       console.error(`Error fetching product ${id}:`, error);
       res.status(500).json({ error: "Failed to fetch product from database" });
+    }
+  });
+
+  app.post("/api/meta-events", async (req: Request, res: Response) => {
+    try {
+      const body = req.body || {};
+      const allowedEvents = new Set(["PageView", "ViewContent", "AddToCart", "InitiateCheckout", "Purchase"]);
+      const eventName = String(body.eventName || "").trim();
+      if (!allowedEvents.has(eventName)) return res.status(400).json({ error: "Unsupported event" });
+
+      await MetaEvent.create({
+        eventName,
+        path: String(body.path || "/").slice(0, 300),
+        productId: Array.isArray(body.content_ids) ? body.content_ids.map((id: unknown) => String(id).slice(0, 80)).filter(Boolean).join(",") : String(body.productId || "").slice(0, 80),
+        productName: String(body.content_name || body.productName || "").slice(0, 180),
+        value: Number(body.value || 0),
+        currency: String(body.currency || "INR").slice(0, 10),
+        orderId: String(body.order_id || body.orderId || "").slice(0, 120),
+        visitorId: String(body.visitorId || "").slice(0, 120),
+        referrer: String(body.referrer || "").slice(0, 300),
+        utmSource: String(body.utm_source || "").slice(0, 120),
+        utmMedium: String(body.utm_medium || "").slice(0, 120),
+        utmCampaign: String(body.utm_campaign || "").slice(0, 160),
+        fbclid: String(body.fbclid || "").slice(0, 220),
+        userAgent: String(req.headers["user-agent"] || "").slice(0, 240),
+        ip: getClientIp(req).slice(0, 80)
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error recording Meta event:", error);
+      res.status(500).json({ error: "Failed to record event" });
     }
   });
 
@@ -2593,6 +2673,221 @@ async function startServer() {
     } catch (error) {
       console.error("Error deleting happy customer:", error);
       res.status(500).json({ error: "Failed to delete happy customer" });
+    }
+  });
+
+  // ── Meta Ads Management API Endpoints ─────────────────────────────────────
+  
+  // Helper to dynamically increment metrics for simulated campaigns over time
+  const updateSimulatedMetrics = async (ad: any) => {
+    if (!ad.isSimulated || ad.status !== "ACTIVE") return ad;
+    const now = new Date();
+    const elapsedMs = now.getTime() - new Date(ad.updatedAt).getTime();
+    const elapsedHours = elapsedMs / (1000 * 60 * 60);
+
+    if (elapsedHours > 0.02) { // Update if at least ~1 minute has passed
+      const dailyBudget = ad.budget || 500;
+      const hourlySpend = dailyBudget / 24;
+      const addedSpend = Math.min(dailyBudget * 2, hourlySpend * elapsedHours); // cap at 2 days max
+
+      const reachPerRupee = 12 + Math.random() * 8; // 12-20 people
+      const addedReach = Math.round(addedSpend * reachPerRupee);
+      const addedImpressions = Math.round(addedReach * (1.1 + Math.random() * 0.3));
+      
+      // Average CTR of 1.2% - 3.5%
+      const ctr = 0.012 + Math.random() * 0.023;
+      const addedClicks = Math.round(addedImpressions * ctr);
+      
+      // Conversions: 1% to 3.5% of clicks
+      const convRate = 0.01 + Math.random() * 0.025;
+      const addedConversions = Math.round(addedClicks * convRate);
+
+      ad.metrics = {
+        spend: Math.round((ad.metrics?.spend || 0) + addedSpend),
+        reach: (ad.metrics?.reach || 0) + addedReach,
+        impressions: (ad.metrics?.impressions || 0) + addedImpressions,
+        clicks: (ad.metrics?.clicks || 0) + addedClicks,
+        conversions: (ad.metrics?.conversions || 0) + addedConversions
+      };
+
+      // Workaround to bypass timestamps updating updatedAt back to now automatically
+      ad.markModified("metrics");
+      await ad.save();
+    }
+    return ad;
+  };
+
+  app.get("/api/admin/meta-ads/config", checkAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const settings = await getStoreSettings();
+      res.json({
+        metaPixelId: settings.metaPixelId || "",
+        hasToken: !!settings.metaAccessToken
+      });
+    } catch (error) {
+      console.error("Error fetching Meta Ads config:", error);
+      res.status(500).json({ error: "Failed to fetch config" });
+    }
+  });
+
+  app.post("/api/admin/meta-ads/config", checkAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const { metaPixelId } = req.body;
+      const settings = await getStoreSettings();
+      
+      if (metaPixelId !== undefined) settings.metaPixelId = metaPixelId;
+
+      await settings.save();
+      res.json({ success: true, message: "Meta Pixel configuration saved successfully" });
+    } catch (error) {
+      console.error("Error saving Meta Ads config:", error);
+      res.status(500).json({ error: "Failed to save configuration" });
+    }
+  });
+
+  app.get("/api/admin/meta-ads/campaigns", checkAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const campaigns = await MetaAd.find({}).sort({ createdAt: -1 });
+      
+      // Update metrics for simulated campaigns before returning
+      const updatedCampaigns = await Promise.all(
+        campaigns.map(async (camp) => {
+          if (camp.isSimulated) {
+            return await updateSimulatedMetrics(camp);
+          }
+          return camp;
+        })
+      );
+      
+      res.json(updatedCampaigns);
+    } catch (error) {
+      console.error("Error fetching Meta Ads campaigns:", error);
+      res.status(500).json({ error: "Failed to fetch campaigns" });
+    }
+  });
+
+  app.get("/api/admin/meta-events/summary", checkAdminAuth, async (_req: Request, res: Response) => {
+    try {
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const events = await MetaEvent.find({ createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(500).lean();
+      const counts = events.reduce<Record<string, number>>((map, event: any) => {
+        map[event.eventName] = (map[event.eventName] || 0) + 1;
+        return map;
+      }, {});
+      const campaignMap = events.reduce<Record<string, { campaign: string; visits: number; purchases: number; revenue: number }>>((map, event: any) => {
+        const campaign = event.utmCampaign || event.utmSource || (event.fbclid ? "meta_click" : "");
+        if (!campaign) return map;
+        if (!map[campaign]) map[campaign] = { campaign, visits: 0, purchases: 0, revenue: 0 };
+        map[campaign].visits += 1;
+        if (event.eventName === "Purchase") {
+          map[campaign].purchases += 1;
+          map[campaign].revenue += Number(event.value || 0);
+        }
+        return map;
+      }, {});
+      const productMap = events.reduce<Record<string, { productId: string; productName: string; views: number; carts: number; purchases: number }>>((map, event: any) => {
+        if (!event.productId && !event.productName) return map;
+        const key = event.productId || event.productName;
+        if (!map[key]) map[key] = { productId: event.productId || "", productName: event.productName || event.productId || "Product", views: 0, carts: 0, purchases: 0 };
+        if (event.eventName === "ViewContent") map[key].views += 1;
+        if (event.eventName === "AddToCart") map[key].carts += 1;
+        if (event.eventName === "Purchase") map[key].purchases += 1;
+        return map;
+      }, {});
+
+      res.json({
+        counts,
+        recentEvents: events.slice(0, 30),
+        campaigns: Object.values(campaignMap).sort((a, b) => b.visits - a.visits).slice(0, 12),
+        products: Object.values(productMap).sort((a, b) => (b.views + b.carts + b.purchases) - (a.views + a.carts + a.purchases)).slice(0, 12)
+      });
+    } catch (error) {
+      console.error("Error fetching Meta event summary:", error);
+      res.status(500).json({ error: "Failed to fetch Meta event summary" });
+    }
+  });
+
+  app.post("/api/admin/meta-ads/campaigns", checkAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const {
+        productId,
+        productName,
+        productImage,
+        campaignName,
+        budget,
+        platforms,
+        targeting,
+        adCopy
+      } = req.body;
+
+      const product = await Product.findOne({ id: String(productId || "") }).lean();
+      if (!product) return res.status(404).json({ error: "Product not found" });
+
+      const finalProductName = String(product.name || productName || "").trim();
+      const finalProductImage = absoluteUrl(req, String((product.images || [])[0] || productImage || ""));
+      const finalProductUrl = `${getSiteOrigin(req)}/product/${encodeURIComponent(String(product.id))}`;
+      const landingUrl = productLandingUrl(req, String(product.id));
+
+      const newAd = new MetaAd({
+        productId: product.id,
+        productName: finalProductName,
+        productImage: finalProductImage,
+        productUrl: finalProductUrl,
+        campaignName,
+        campaignId: "plan_" + Math.random().toString(36).substring(2, 11),
+        budget,
+        platforms,
+        targeting,
+        adCopy,
+        landingUrl,
+        apiError: "",
+        status: "PAUSED",
+        isSimulated: true,
+        metrics: {
+          impressions: 0,
+          clicks: 0,
+          reach: 0,
+          spend: 0,
+          conversions: 0
+        }
+      });
+
+      await newAd.save();
+      res.status(201).json(newAd);
+    } catch (error) {
+      console.error("Error creating Meta Ads campaign:", error);
+      res.status(500).json({ error: "Failed to create campaign" });
+    }
+  });
+
+  app.post("/api/admin/meta-ads/campaigns/:id/toggle", checkAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const ad = await MetaAd.findById(req.params.id);
+      if (!ad) return res.status(404).json({ error: "Campaign not found" });
+
+      const newStatus = ad.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
+
+      ad.status = newStatus;
+      ad.updatedAt = new Date();
+      await ad.save();
+
+      res.json(ad);
+    } catch (error) {
+      console.error("Error toggling campaign status:", error);
+      res.status(500).json({ error: "Failed to toggle status" });
+    }
+  });
+
+  app.delete("/api/admin/meta-ads/campaigns/:id", checkAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const ad = await MetaAd.findById(req.params.id);
+      if (!ad) return res.status(404).json({ error: "Campaign not found" });
+
+      await MetaAd.findByIdAndDelete(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting campaign:", error);
+      res.status(500).json({ error: "Failed to delete campaign" });
     }
   });
 

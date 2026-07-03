@@ -22,6 +22,12 @@ export interface IStoreSettings {
     title: string;
     message: string;
   }>;
+  metaAccessToken?: string;
+  metaAdAccountId?: string;
+  metaAppId?: string;
+  metaPageId?: string;
+  metaPixelId?: string;
+  metaInstagramActorId?: string;
   updatedAt?: Date;
 }
 
@@ -61,7 +67,13 @@ const StoreSettingsSchema: Schema = new Schema(
           message: "Hello {{name}}, your selected Saiksha pieces are still waiting. Use {{coupon}} while the offer is active."
         }
       ]
-    }
+    },
+    metaAccessToken: { type: String, default: "" },
+    metaAdAccountId: { type: String, default: "" },
+    metaAppId: { type: String, default: "" },
+    metaPageId: { type: String, default: "" },
+    metaPixelId: { type: String, default: "" },
+    metaInstagramActorId: { type: String, default: "" }
   },
   { timestamps: true }
 );

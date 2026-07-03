@@ -70,7 +70,7 @@ type ProductCategoryFilter = "All" | Product["category"];
 type ProductStatusFilter = "All" | "New" | "Trending" | "Sale" | "Limited" | "Custom";
 type ProductStockFilter = "All" | "In Stock" | "Low Stock" | "Out of Stock";
 type ProductSortOption = "Newest" | "Name A-Z" | "Price Low" | "Price High" | "Stock Low" | "Most Viewed";
-type AdminTab = "overview" | "products" | "orders" | "customers" | "accounts" | "segments" | "discounts" | "campaigns" | "reviewAutomation" | "cartLeads" | "wishlistLeads" | "leadCaptures" | "searchAnalytics" | "happyCustomers" | "testimonials" | "settings";
+type AdminTab = "overview" | "products" | "orders" | "customers" | "accounts" | "segments" | "discounts" | "campaigns" | "reviewAutomation" | "cartLeads" | "wishlistLeads" | "leadCaptures" | "searchAnalytics" | "happyCustomers" | "testimonials" | "settings" | "metaAds";
 
 export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const { products, addProduct, updateProduct, deleteProduct, adjustInventory } = useProducts();
@@ -185,6 +185,41 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const [settingsForm, setSettingsForm] = useState<StoreSettings>(settings);
   const [savingSettings, setSavingSettings] = useState(false);
 
+  // Meta Ads State
+  const [metaCampaigns, setMetaCampaigns] = useState<any[]>([]);
+  const [loadingMetaCampaigns, setLoadingMetaCampaigns] = useState(false);
+  const [metaConfig, setMetaConfig] = useState({
+    metaPixelId: "",
+    hasToken: false
+  });
+  const [loadingMetaConfig, setLoadingMetaConfig] = useState(false);
+  const [isSavingMetaConfig, setIsSavingMetaConfig] = useState(false);
+  const [showMetaSettings, setShowMetaSettings] = useState(false);
+  const [metaEventSummary, setMetaEventSummary] = useState<any>({ counts: {}, campaigns: [], products: [], recentEvents: [] });
+  const [loadingMetaEvents, setLoadingMetaEvents] = useState(false);
+  
+  // Form for creating a new ad
+  const [isCreateAdModalOpen, setIsCreateAdModalOpen] = useState(false);
+  const [selectedProductForAd, setSelectedProductForAd] = useState<Product | null>(null);
+  const [isCreatingAd, setIsCreatingAd] = useState(false);
+  const [adCampaignForm, setAdCampaignForm] = useState({
+    campaignName: "",
+    budget: 500,
+    platforms: ["instagram_feed", "instagram_stories"],
+    targeting: {
+      location: "India",
+      ageMin: 18,
+      ageMax: 45,
+      gender: "ALL" as "ALL" | "MALE" | "FEMALE",
+      interests: ["Jewelry", "Fashion Accessories"]
+    },
+    adCopy: {
+      primaryText: "Explore our latest handcrafted jewelry. Exclusive designs with premium stones, made with love for your special moments.",
+      headline: "Premium Handcrafted Jewelry",
+      description: "Free shipping across India on orders over Rs 5,000"
+    }
+  });
+
   // CRUD & Modal State for Products
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -261,6 +296,9 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       fetchWhatsAppCampaigns();
       fetchReviewReminders();
       fetchHappyCustomers();
+      fetchMetaCampaigns();
+      fetchMetaConfig();
+      fetchMetaEventSummary();
     }
   }, [isAuthenticated]);
 
@@ -462,6 +500,144 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       }
     } catch (err) {
       console.error("Error fetching customer accounts:", err);
+    }
+  };
+
+  const fetchMetaCampaigns = async () => {
+    setLoadingMetaCampaigns(true);
+    try {
+      const response = await fetch("/api/admin/meta-ads/campaigns", { credentials: "include" });
+      if (response.ok) {
+        setMetaCampaigns(await response.json());
+      }
+    } catch (err) {
+      console.error("Error fetching Meta campaigns:", err);
+    } finally {
+      setLoadingMetaCampaigns(false);
+    }
+  };
+
+  const fetchMetaConfig = async () => {
+    setLoadingMetaConfig(true);
+    try {
+      const response = await fetch("/api/admin/meta-ads/config", { credentials: "include" });
+      if (response.ok) {
+        setMetaConfig(await response.json());
+      }
+    } catch (err) {
+      console.error("Error fetching Meta config:", err);
+    } finally {
+      setLoadingMetaConfig(false);
+    }
+  };
+
+  const fetchMetaEventSummary = async () => {
+    setLoadingMetaEvents(true);
+    try {
+      const response = await fetch("/api/admin/meta-events/summary", { credentials: "include" });
+      if (response.ok) {
+        setMetaEventSummary(await response.json());
+      }
+    } catch (err) {
+      console.error("Error fetching Meta event summary:", err);
+    } finally {
+      setLoadingMetaEvents(false);
+    }
+  };
+
+  const saveMetaConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingMetaConfig(true);
+    try {
+      const response = await fetch("/api/admin/meta-ads/config", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(metaConfig)
+      });
+      if (response.ok) {
+        toast.success("Meta Pixel settings saved successfully.");
+        fetchMetaConfig();
+        setShowMetaSettings(false);
+      } else {
+        toast.error("Failed to save configuration.");
+      }
+    } catch (err) {
+      console.error("Error saving Meta config:", err);
+      toast.error("Error saving configuration.");
+    } finally {
+      setIsSavingMetaConfig(false);
+    }
+  };
+
+  const handleDeleteMetaCampaign = async (id: string) => {
+    if (!id) {
+      toast.error("Could not delete this saved ad URL.");
+      return;
+    }
+    if (!window.confirm("Delete this saved product ad URL?")) return;
+    try {
+      const response = await fetch(`/api/admin/meta-ads/campaigns/${id}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+      if (response.ok) {
+        setMetaCampaigns((prev) => prev.filter((campaign) => campaign._id !== id));
+        toast.success("Product ad URL deleted.");
+        fetchMetaCampaigns();
+      } else {
+        const data = await response.json().catch(() => ({}));
+        if (response.status === 404) {
+          setMetaCampaigns((prev) => prev.filter((campaign) => campaign._id !== id));
+          toast.success("Product ad URL removed.");
+          return;
+        }
+        toast.error(data.error || "Failed to delete product ad URL.");
+      }
+    } catch (err) {
+      console.error("Error deleting campaign:", err);
+      toast.error("Network error.");
+    }
+  };
+
+  const handleCreateMetaCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProductForAd) {
+      toast.error("Please select a product for this ad.");
+      return;
+    }
+    setIsCreatingAd(true);
+    try {
+      const response = await fetch("/api/admin/meta-ads/campaigns", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: selectedProductForAd.id,
+          productName: selectedProductForAd.name,
+          productImage: selectedProductForAd.images[0] || "",
+          campaignName: adCampaignForm.campaignName || `Ad: ${selectedProductForAd.name}`,
+          budget: adCampaignForm.budget,
+          platforms: adCampaignForm.platforms,
+          targeting: adCampaignForm.targeting,
+          adCopy: adCampaignForm.adCopy
+        })
+      });
+      if (response.ok) {
+        const campaign = await response.json();
+        setMetaCampaigns((prev) => [campaign, ...prev.filter((item) => item._id !== campaign._id)]);
+        toast.success("Product ad plan prepared. Copy its landing page into Meta Ads Manager.");
+        fetchMetaCampaigns();
+        setIsCreateAdModalOpen(false);
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Failed to save product ad URL.");
+      }
+    } catch (err) {
+      console.error("Error launching campaign:", err);
+      toast.error("Network error.");
+    } finally {
+      setIsCreatingAd(false);
     }
   };
 
@@ -1335,6 +1511,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     { id: "searchAnalytics" as const, label: "Search Analytics", count: searchAnalytics.length, icon: Search },
     { id: "happyCustomers" as const, label: "Happy Customers", count: happyCustomers.length, icon: Instagram },
     { id: "testimonials" as const, label: "Testimonials", count: totalReviewsCount, icon: MessageSquare },
+    { id: "metaAds" as const, label: "Meta Ads Manager", count: metaCampaigns.length, icon: TrendingUp },
     { id: "settings" as const, label: "Store Settings", count: null, icon: Settings }
   ];
   const productCategories: ProductCategoryFilter[] = ["All", "Earrings", "Necklaces", "Bestsellers", "New Arrivals", "Gifts"];
@@ -1826,8 +2003,12 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {salesAnalytics.topProducts.map((product: any) => (
-                    <div key={product.name} className="flex items-center justify-between rounded-lg border border-neutral-100 px-3 py-2 text-xs">
-                      <span className="font-bold text-neutral-700 truncate">{product.name}</span>
+                    <div key={product.name} className="grid grid-cols-[minmax(0,1fr)_88px] items-center gap-3 rounded-lg border border-neutral-100 px-3 py-3 text-xs [&>span:last-child]:hidden">
+                      <span className="min-w-0 truncate font-bold text-neutral-700" title={product.name}>{product.name}</span>
+                      <span className="shrink-0 text-right leading-snug text-neutral-400">
+                        <span className="block whitespace-nowrap">Qty {product.quantity}</span>
+                        <span className="block whitespace-nowrap">Rs {Number(product.revenue || 0).toLocaleString()}</span>
+                      </span>
                       <span className="text-neutral-400">Qty {product.quantity} · Rs {Number(product.revenue || 0).toLocaleString()}</span>
                     </div>
                   ))}
@@ -3550,6 +3731,348 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
           </section>
         )}
 
+        {activeTab === "metaAds" && (
+          <section className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900 flex items-center gap-2">
+                  <span>Meta Pixel & Ad Links</span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest border bg-blue-50 text-blue-700 border-blue-200">
+                    Tracking Setup
+                  </span>
+                </h4>
+                <p className="text-[10px] text-neutral-450 mt-0.5">
+                  Add your Meta Pixel ID so Meta can track product views, cart actions, checkout starts, and purchases from your ads.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setShowMetaSettings(!showMetaSettings)}
+                  className="rounded-xl border border-neutral-200 hover:bg-neutral-50 px-4 py-2.5 text-[10px] uppercase tracking-widest font-bold text-neutral-600 transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <Settings size={12} />
+                  <span>Pixel Setup</span>
+                </button>
+                <button
+                  onClick={() => {
+                    if (products.length === 0) {
+                      toast.error("Please add products first.");
+                      return;
+                    }
+                    setSelectedProductForAd(products[0]);
+                    setAdCampaignForm({
+                      campaignName: `Ad: Promo - ${products[0].name}`,
+                      budget: 500,
+                      platforms: ["instagram_feed", "instagram_stories"],
+                      targeting: {
+                        location: "India",
+                        ageMin: 18,
+                        ageMax: 45,
+                        gender: "ALL",
+                        interests: ["Jewelry", "Fashion Accessories", "Online Shopping"]
+                      },
+                      adCopy: {
+                        primaryText: `✨ Meet the stunning ${products[0].name}. Elegant handcrafted jewelry with premium stones. Perfect for styling or gifting. Buy yours today!`,
+                        headline: `${products[0].name} | Saiksha Jewels`,
+                        description: `Available now for Rs ${products[0].price.toLocaleString()}. Free shipping over Rs 5,000.`
+                      }
+                    });
+                    setIsCreateAdModalOpen(true);
+                  }}
+                  className="rounded-xl bg-brand-ink hover:bg-neutral-800 text-white px-5 py-2.5 text-[10px] uppercase tracking-widest font-bold shadow-md shadow-brand-ink/10 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus size={12} />
+                  <span>Prepare Product Ad</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5 shadow-xs">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                  <h5 className="font-bold text-xs uppercase tracking-wider text-blue-800">
+                    What this page does
+                  </h5>
+                  <p className="mt-1 text-[11px] leading-relaxed max-w-3xl text-blue-900">
+                    Your website tracks Meta Pixel events. You can also prepare clean product URLs to paste into Meta Ads Manager when creating ads manually.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowMetaSettings(true)}
+                  className="shrink-0 rounded-xl bg-blue-700 px-5 py-2.5 text-[10px] uppercase tracking-widest font-bold text-white shadow-sm hover:bg-blue-800 cursor-pointer"
+                >
+                  View Pixel Setup
+                </button>
+              </div>
+            </div>
+
+            {/* Meta API Settings panel */}
+            {showMetaSettings && (
+              <form onSubmit={saveMetaConfig} className="bg-white rounded-2xl border border-neutral-100 p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+                  <div>
+                    <h5 className="font-bold text-xs uppercase tracking-wider text-neutral-800">Meta Pixel Setup</h5>
+                    <p className="mt-1 text-[10px] text-neutral-400">Save only your Meta Pixel ID. Ads, budget, audience, and Instagram page selection stay inside Meta Ads Manager.</p>
+                  </div>
+                  <button type="button" onClick={() => setShowMetaSettings(false)} className="text-neutral-400 hover:text-neutral-600"><X size={14} /></button>
+                </div>
+                <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+                  <p className="text-[9px] uppercase tracking-wider font-bold text-neutral-500">Pixel event checklist</p>
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2 text-[10px]">
+                    {[
+                      { label: "Pixel ID", done: !!metaConfig.metaPixelId },
+                      { label: "PageView", done: !!metaConfig.metaPixelId },
+                      { label: "ViewContent", done: !!metaConfig.metaPixelId },
+                      { label: "AddToCart", done: !!metaConfig.metaPixelId },
+                      { label: "Purchase", done: !!metaConfig.metaPixelId }
+                    ].map((item) => (
+                      <div key={item.label} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 border border-neutral-100">
+                        <span className={cn("h-2 w-2 rounded-full", item.done ? "bg-emerald-500" : "bg-amber-400")} />
+                        <span className="font-bold text-neutral-600">{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-neutral-500">Meta Pixel ID</label>
+                    <input
+                      type="text"
+                      value={metaConfig.metaPixelId}
+                      onChange={(e) => setMetaConfig(p => ({ ...p, metaPixelId: e.target.value }))}
+                      placeholder="e.g. 1122334455"
+                      className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-xs text-blue-900">
+                  <p className="font-bold uppercase tracking-wider text-[9px] text-blue-700">Product Catalog Feed</p>
+                  <p className="mt-1 text-[11px] leading-relaxed">
+                    Use this feed in Meta Commerce Manager for catalog import. It contains product IDs, prices, stock status, images, and direct product links.
+                  </p>
+                  <code className="mt-2 block break-all rounded-lg bg-white/80 px-3 py-2 text-[11px] text-blue-950">
+                    {typeof window !== "undefined" ? `${window.location.origin}/meta-product-feed.csv` : "/meta-product-feed.csv"}
+                  </code>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSavingMetaConfig}
+                    className="rounded-xl bg-brand-ink hover:bg-neutral-800 text-white px-5 py-2.5 text-[9px] uppercase tracking-wider font-bold cursor-pointer"
+                  >
+                    {isSavingMetaConfig ? "Saving..." : "Save Pixel ID"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="bg-white rounded-2xl border border-neutral-100 shadow-xs overflow-hidden">
+              <div className="p-5 border-b border-neutral-100 flex items-center justify-between gap-4">
+                <div>
+                  <h5 className="font-bold text-xs uppercase tracking-wider text-neutral-800">Website Pixel Activity</h5>
+                  <p className="mt-1 text-[10px] text-neutral-400">Events recorded by your website in the last 30 days. Meta Ads Manager remains the source of official ad spend and approval data.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchMetaEventSummary}
+                  disabled={loadingMetaEvents}
+                  className="p-2 rounded-lg border border-neutral-200 hover:bg-neutral-50 text-neutral-500 hover:text-neutral-700 transition-colors flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider cursor-pointer"
+                >
+                  <RefreshCw size={10} className={cn(loadingMetaEvents && "animate-spin")} />
+                  Refresh Activity
+                </button>
+              </div>
+              <div className="p-5 space-y-5">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  {[
+                    { label: "Visits", value: metaEventSummary.counts?.PageView || 0 },
+                    { label: "Product Views", value: metaEventSummary.counts?.ViewContent || 0 },
+                    { label: "Add to Cart", value: metaEventSummary.counts?.AddToCart || 0 },
+                    { label: "Checkouts", value: metaEventSummary.counts?.InitiateCheckout || 0 },
+                    { label: "Purchases", value: metaEventSummary.counts?.Purchase || 0 }
+                  ].map((card) => (
+                    <div key={card.label} className="rounded-xl border border-neutral-100 bg-neutral-50/60 p-4">
+                      <p className="text-[9px] uppercase font-bold tracking-wider text-neutral-400">{card.label}</p>
+                      <p className="mt-1 text-xl font-serif font-bold text-neutral-950">{Number(card.value || 0).toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  <div className="rounded-xl border border-neutral-100 overflow-hidden">
+                    <div className="border-b border-neutral-100 bg-neutral-50 px-4 py-3 text-[9px] uppercase tracking-wider font-bold text-neutral-500">Campaign URLs Detected</div>
+                    {metaEventSummary.campaigns?.length ? (
+                      <div className="divide-y divide-neutral-100">
+                        {metaEventSummary.campaigns.map((campaign: any) => (
+                          <div key={campaign.campaign} className="px-4 py-3 text-xs flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-bold text-neutral-800 truncate">{campaign.campaign}</p>
+                              <p className="text-[10px] text-neutral-400">{campaign.visits} events</p>
+                            </div>
+                            <div className="text-right text-[10px] text-neutral-500">
+                              <p>{campaign.purchases} purchases</p>
+                              <p>Rs {Number(campaign.revenue || 0).toLocaleString("en-IN")}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-4 py-8 text-center text-xs text-neutral-400">No UTM campaign traffic yet.</div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-neutral-100 overflow-hidden">
+                    <div className="border-b border-neutral-100 bg-neutral-50 px-4 py-3 text-[9px] uppercase tracking-wider font-bold text-neutral-500">Product Activity</div>
+                    {metaEventSummary.products?.length ? (
+                      <div className="divide-y divide-neutral-100">
+                        {metaEventSummary.products.map((product: any) => (
+                          <div key={product.productId || product.productName} className="px-4 py-3 text-xs flex items-center justify-between gap-3">
+                            <p className="font-bold text-neutral-800 line-clamp-1">{product.productName}</p>
+                            <p className="shrink-0 text-[10px] text-neutral-500">{product.views} views / {product.carts} carts / {product.purchases} buys</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-4 py-8 text-center text-xs text-neutral-400">No product activity recorded yet.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Campaign list */}
+            <div className="bg-white rounded-2xl border border-neutral-100 shadow-xs overflow-hidden">
+              <div className="p-5 border-b border-neutral-100 flex items-center justify-between">
+                <h5 className="font-bold text-xs uppercase tracking-wider text-neutral-800">Prepared Meta Product Ads</h5>
+                <button
+                  onClick={fetchMetaCampaigns}
+                  disabled={loadingMetaCampaigns}
+                  className="p-2 rounded-lg border border-neutral-200 hover:bg-neutral-50 text-neutral-500 hover:text-neutral-700 transition-colors flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider cursor-pointer"
+                >
+                  <RefreshCw size={10} className={cn(loadingMetaCampaigns && "animate-spin")} />
+                  Refresh Plans
+                </button>
+              </div>
+
+              {loadingMetaCampaigns && metaCampaigns.length === 0 ? (
+                <div className="text-center py-20 text-xs text-neutral-400">Loading campaigns...</div>
+              ) : metaCampaigns.length === 0 ? (
+                <div className="text-center py-20 text-xs text-neutral-400 p-6">
+                  No product ad links yet. Click "Prepare Product Ad" if you want a clean URL to paste into Meta Ads Manager.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-neutral-100 bg-neutral-50/50 text-[9px] uppercase tracking-wider text-neutral-400 font-bold">
+                        <th className="p-4 pl-6">Product Ad Plan</th>
+                        <th className="p-4">Ad Destination</th>
+                        <th className="p-4">Placements</th>
+                        <th className="p-4">Budget Note</th>
+                        <th className="p-4">Plan Status</th>
+                        <th className="p-4 pr-6 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100 text-xs">
+                      {metaCampaigns.map((ad) => {
+                        return (
+                          <tr key={ad._id} className="hover:bg-neutral-50/50">
+                            <td className="p-4 pl-6">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={ad.productImage}
+                                  alt={ad.productName}
+                                  className="h-10 w-10 object-cover rounded-lg border border-neutral-200"
+                                />
+                                <div>
+                                  <p className="font-bold text-neutral-900">{ad.campaignName}</p>
+                                  <p className="text-[9px] text-neutral-400 mt-0.5 flex items-center gap-1">
+                                    <span>Target Product: {ad.productName}</span>
+                                    <span>•</span>
+                                    <span className={ad.isSimulated ? "text-amber-500 font-bold" : "text-green-500 font-bold"}>
+                                      {ad.isSimulated ? "PREPARED" : "META API"}
+                                    </span>
+                                  </p>
+                                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                                    <a
+                                      href={ad.landingUrl || ad.productUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex text-[9px] font-bold uppercase tracking-wider text-[#a2855b] hover:text-brand-ink"
+                                    >
+                                      Open ad landing page
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(ad.landingUrl || ad.productUrl || "");
+                                        toast.success("Ad URL copied. Paste it into Meta Ads Manager.");
+                                      }}
+                                      className="inline-flex text-[9px] font-bold uppercase tracking-wider text-neutral-400 hover:text-brand-ink"
+                                    >
+                                      Copy ad URL
+                                    </button>
+                                  </div>
+                                  {ad.apiError && (
+                                    <p className="mt-1 max-w-xs text-[9px] leading-relaxed text-amber-600">
+                                      Meta API: {ad.apiError}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="p-4 max-w-xs">
+                              <div className="truncate text-[10px] text-neutral-500">{ad.landingUrl || ad.productUrl}</div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(ad.landingUrl || ad.productUrl || "");
+                                  toast.success("Ad URL copied. Paste it into Meta Ads Manager.");
+                                }}
+                                className="mt-1 text-[9px] font-bold uppercase tracking-wider text-[#a2855b] hover:text-brand-ink"
+                              >
+                                Copy URL
+                              </button>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex flex-wrap gap-1">
+                                {ad.platforms.map((plat: string) => (
+                                  <span key={plat} className="px-1.5 py-0.5 rounded-md bg-neutral-100 text-[8px] uppercase tracking-wider font-bold text-neutral-500">
+                                    {plat.replace("instagram_", "ig ").replace("facebook_", "fb ").replace("_", " ")}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="p-4 font-bold text-neutral-700">
+                              Rs {ad.budget}/day
+                              <div className="mt-0.5 text-[9px] font-normal text-neutral-400">Set final budget in Meta Ads Manager</div>
+                            </td>
+                            <td className="p-4">
+                              <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[8px] font-bold uppercase tracking-wider text-blue-700">
+                                Prepared
+                              </span>
+                            </td>
+                            <td className="p-4 pr-6 text-right">
+                              <button
+                                onClick={() => handleDeleteMetaCampaign(ad._id)}
+                                className="text-red-500 hover:text-red-700 p-1 cursor-pointer"
+                                title="Delete campaign"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         {activeTab === "settings" && (
           <section className="space-y-6">
             <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -4428,6 +4951,137 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Prepare Product Ad URL Modal */}
+      {isCreateAdModalOpen && selectedProductForAd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-neutral-950/40 backdrop-blur-xs" onClick={() => setIsCreateAdModalOpen(false)} />
+          <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-neutral-100 flex items-center justify-between bg-neutral-50/50">
+              <div>
+                <h3 className="font-serif text-lg font-bold text-neutral-950 flex items-center gap-2">
+                  <span>Prepare Product Ad URL</span>
+                  <span className="text-[9px] bg-neutral-200 text-neutral-600 px-2 py-0.5 rounded font-bold uppercase tracking-wider">
+                    Copy Into Meta Ads Manager
+                  </span>
+                </h3>
+                <p className="text-[10px] text-neutral-400 mt-0.5">Select a product and copy its tracked website URL. Budget, audience, placements, and creative are handled in Meta Ads Manager.</p>
+              </div>
+              <button onClick={() => setIsCreateAdModalOpen(false)} className="p-2 hover:bg-neutral-100 rounded-full text-neutral-400 hover:text-neutral-800 transition-all cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
+              <form onSubmit={handleCreateMetaCampaign} className="space-y-5 text-xs text-neutral-700">
+                <div className="space-y-1">
+                  <label className="font-bold text-neutral-500 uppercase tracking-wider text-[9px]">Select Jewelry Piece *</label>
+                  <select
+                    value={selectedProductForAd.id}
+                    onChange={(e) => {
+                      const prod = products.find(p => p.id === e.target.value);
+                      if (prod) {
+                        setSelectedProductForAd(prod);
+                        setAdCampaignForm(p => ({
+                          ...p,
+                          campaignName: `Ad: Promo - ${prod.name}`,
+                          adCopy: {
+                            primaryText: `✨ Meet the stunning ${prod.name}. Elegant handcrafted jewelry with premium stones. Perfect for styling or gifting. Buy yours today!`,
+                            headline: `${prod.name} | Saiksha Jewels`,
+                            description: `Available now for Rs ${prod.price.toLocaleString()}. Free shipping over Rs 5,000.`
+                          }
+                        }));
+                      }
+                    }}
+                    className="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-xs"
+                  >
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} - Rs {p.price.toLocaleString()}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-neutral-500 uppercase tracking-wider text-[9px]">Tracking Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={adCampaignForm.campaignName}
+                    onChange={(e) => setAdCampaignForm(p => ({ ...p, campaignName: e.target.value }))}
+                    placeholder="e.g. Flower earrings July ad"
+                    className="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-xs"
+                  />
+                  <p className="text-[10px] text-neutral-400">This is only a label for your admin list. Create the real campaign name inside Meta Ads Manager.</p>
+                </div>
+
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-[11px] text-emerald-900">
+                  <p className="font-bold uppercase tracking-wider text-[9px] text-emerald-700">Ad Click Destination</p>
+                  <p className="mt-1 break-all font-mono">
+                    {typeof window !== "undefined" ? `${window.location.origin}/product/${selectedProductForAd.id}?utm_source=meta_ads&utm_medium=paid_social&utm_campaign=meta_product_ad` : `/product/${selectedProductForAd.id}`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = `${window.location.origin}/product/${selectedProductForAd.id}?utm_source=meta_ads&utm_medium=paid_social&utm_campaign=meta_product_ad`;
+                      navigator.clipboard.writeText(url);
+                      toast.success("Product ad URL copied.");
+                    }}
+                    className="mt-3 rounded-lg bg-emerald-700 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-emerald-800"
+                  >
+                    Copy URL
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-[11px] leading-relaxed text-blue-900">
+                  <p className="font-bold uppercase tracking-wider text-[9px] text-blue-700">Next Step In Meta Ads Manager</p>
+                  <p className="mt-1">Paste this URL into the website destination field when you create the ad. Meta Ads Manager will handle page selection, Instagram account, placements, budget, audience, payment, and approval.</p>
+                </div>
+
+                <div className="pt-4 border-t border-neutral-100 flex items-center justify-end space-x-3 bg-neutral-50/20 -mx-6 -mb-6 p-6">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateAdModalOpen(false)}
+                    className="px-6 py-2.5 rounded-lg font-bold border border-neutral-200 hover:bg-neutral-50 text-neutral-500 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isCreatingAd}
+                    className="px-8 py-2.5 rounded-lg font-bold bg-brand-ink text-white hover:bg-neutral-800 transition-colors shadow-lg shadow-brand-ink/5 cursor-pointer"
+                  >
+                    {isCreatingAd ? "Saving..." : "Save URL Plan"}
+                  </button>
+                </div>
+              </form>
+
+              <div className="space-y-3">
+                <p className="font-bold text-neutral-400 uppercase tracking-wider text-[9px]">Product Preview</p>
+                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="overflow-hidden rounded-xl bg-white shadow-sm border border-neutral-100">
+                    <img
+                      src={selectedProductForAd.images[0] || "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&q=80&w=600"}
+                      alt={selectedProductForAd.name}
+                      className="aspect-square w-full object-cover"
+                    />
+                    <div className="p-4 space-y-2">
+                      <p className="text-xs font-bold text-neutral-900 line-clamp-2">{selectedProductForAd.name}</p>
+                      <p className="text-[10px] uppercase tracking-wider text-neutral-400">{selectedProductForAd.category}</p>
+                      <p className="text-sm font-serif text-neutral-950">
+                        Rs {(selectedProductForAd.isSale && selectedProductForAd.salePrice ? selectedProductForAd.salePrice : selectedProductForAd.price).toLocaleString()}
+                      </p>
+                      <div className="rounded-lg border border-neutral-100 bg-neutral-50 px-3 py-2 text-[10px] text-neutral-500">
+                        Use this product image/text as reference while building the final creative in Meta Ads Manager.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
       )}

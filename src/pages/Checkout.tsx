@@ -21,6 +21,7 @@ import { useStoreSettings } from "../context/StoreSettingsContext";
 import { useCustomerAuth } from "../context/CustomerAuthContext";
 import logoImg from "../assets/images/saiksha-logo-mark.png";
 import { toast } from "sonner";
+import { trackMetaEvent } from "../components/MetaPixel";
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -218,6 +219,13 @@ export default function Checkout() {
   const handleContinueToPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (validateShippingForm()) {
+      trackMetaEvent("InitiateCheckout", {
+        content_ids: checkoutItems.map((item) => item.id),
+        content_type: "product",
+        value: total,
+        currency: "INR",
+        contents: checkoutItems.map((item) => ({ id: item.id, quantity: item.quantity }))
+      });
       setStep(2);
     }
   };
@@ -260,6 +268,14 @@ export default function Checkout() {
         const data = await response.json();
         if (response.ok && data.success) {
           setOrderId(data.orderId);
+          trackMetaEvent("Purchase", {
+            content_ids: checkoutItems.map((item) => item.id),
+            content_type: "product",
+            value: total,
+            currency: "INR",
+            contents: checkoutItems.map((item) => ({ id: item.id, quantity: item.quantity })),
+            order_id: data.orderId
+          });
           clearCart();
           toast.success("Your luxury selection order has been placed successfully!");
         } else {
@@ -337,6 +353,14 @@ export default function Checkout() {
               const verifyData = await verifyResponse.json();
               if (verifyResponse.ok && verifyData.success) {
                 setOrderId(verifyData.orderId);
+                trackMetaEvent("Purchase", {
+                  content_ids: checkoutItems.map((item) => item.id),
+                  content_type: "product",
+                  value: total,
+                  currency: "INR",
+                  contents: checkoutItems.map((item) => ({ id: item.id, quantity: item.quantity })),
+                  order_id: verifyData.orderId
+                });
                 clearCart();
                 toast.success("Payment verified! Order placed successfully.");
               } else {

@@ -7,6 +7,7 @@ import { useStoreSettings } from "../context/StoreSettingsContext";
 import { cn } from "../lib/utils";
 import { motion } from "motion/react";
 import RecentlyViewedProducts from "../components/sections/RecentlyViewedProducts";
+import { trackMetaEvent } from "../components/MetaPixel";
 
 export default function Cart() {
   const { cart, addToCart, removeFromCart, updateQuantity, cartTotal, appliedCoupon, couponDiscountPercent, applyCoupon, clearCoupon } = useCart();
@@ -182,6 +183,14 @@ export default function Cart() {
                             onClick={(e) => {
                               e.preventDefault();
                               addToCart(product);
+                              trackMetaEvent("AddToCart", {
+                                content_ids: [product.id],
+                                content_name: product.name,
+                                content_type: "product",
+                                value: product.isSale && product.salePrice ? product.salePrice : product.price,
+                                currency: "INR",
+                                contents: [{ id: product.id, quantity: 1 }]
+                              });
                             }}
                             className="w-full bg-white/95 text-brand-ink py-2 text-[9px] uppercase tracking-[1.5px] font-bold shadow-sm hover:bg-brand-ink hover:text-white transition-colors"
                           >

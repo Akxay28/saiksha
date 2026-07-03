@@ -18,6 +18,7 @@ import Navbar from "./components/layout/Navbar";
 import Footer from "./components/layout/Footer";
 import GlobalBottomSections from "./components/sections/GlobalBottomSections";
 import LeadCaptureOffer from "./components/lead/LeadCaptureOffer";
+import MetaPixel from "./components/MetaPixel";
 import Home from "./pages/Home";
 import Products from "./pages/Products";
 import ProductDetail from "./pages/ProductDetail";
@@ -178,6 +179,7 @@ export default function App() {
                 <WishlistProvider>
             <ScrollToTop />
             <GlobalSeo />
+            <MetaPixel />
             <Toaster position="bottom-right" richColors toastOptions={{
               style: {
                 fontFamily: "var(--font-sans)",

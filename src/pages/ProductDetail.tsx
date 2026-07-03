@@ -37,6 +37,7 @@ import { applySeo, getSiteUrl, organizationJsonLd } from "../lib/seo";
 import Testimonials from "../components/sections/Testimonials";
 import TrustSection from "../components/sections/TrustSection";
 import RecentlyViewedProducts from "../components/sections/RecentlyViewedProducts";
+import { trackMetaEvent } from "../components/MetaPixel";
 
 export default function ProductDetail() {
   const { products, recordProductView } = useProducts();
@@ -143,6 +144,18 @@ export default function ProductDetail() {
     });
   }, [product?.id, product?.views, settings.storeName, settings.supportEmail, settings.whatsappNumber, settings.instagramUrl]);
 
+  useEffect(() => {
+    if (!product) return;
+    const price = product.isSale && product.salePrice ? product.salePrice : product.price;
+    trackMetaEvent("ViewContent", {
+      content_ids: [product.id],
+      content_name: product.name,
+      content_type: "product",
+      value: price,
+      currency: "INR"
+    });
+  }, [product?.id]);
+
   if (!product) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-brand-cream/10">
@@ -220,9 +233,21 @@ export default function ProductDetail() {
   };
 
   const handleBuyNow = () => {
-    addToCart(product, quantity);
+    handleAddToBag();
     toast.success("Proceeding directly to premium checkout");
     navigate("/checkout");
+  };
+
+  const handleAddToBag = () => {
+    addToCart(product, quantity);
+    trackMetaEvent("AddToCart", {
+      content_ids: [product.id],
+      content_name: product.name,
+      content_type: "product",
+      value: (product.isSale && product.salePrice ? product.salePrice : product.price) * quantity,
+      currency: "INR",
+      contents: [{ id: product.id, quantity }]
+    });
   };
 
   const handleShare = () => {
@@ -536,7 +561,7 @@ export default function ProductDetail() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* 1. Add to Bag */}
                 <button
-                  onClick={() => addToCart(product, quantity)}
+                  onClick={handleAddToBag}
                   disabled={product.stock === 0}
                   className={cn(
                     "w-full py-4 px-6 text-[11px] uppercase tracking-[2px] font-bold transition-all flex items-center justify-center space-x-2.5 rounded-sm shadow-sm",
@@ -869,8 +894,15 @@ export default function ProductDetail() {
               <button
                 type="button"
                 onClick={() => {
-                  addToCart(product);
-                  frequentlyBoughtTogether.forEach((item) => addToCart(item));
+                  const bundle = [product, ...frequentlyBoughtTogether];
+                  bundle.forEach((item) => addToCart(item));
+                  trackMetaEvent("AddToCart", {
+                    content_ids: bundle.map((item) => item.id),
+                    content_type: "product",
+                    value: bundle.reduce((sum, item) => sum + (item.isSale && item.salePrice ? item.salePrice : item.price), 0),
+                    currency: "INR",
+                    contents: bundle.map((item) => ({ id: item.id, quantity: 1 }))
+                  });
                 }}
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-ink px-5 py-3 text-[10px] uppercase tracking-widest font-bold text-white hover:bg-neutral-800"
               >

@@ -21,6 +21,12 @@ export interface StoreSettings {
     title: string;
     message: string;
   }>;
+  metaAccessToken?: string;
+  metaAdAccountId?: string;
+  metaAppId?: string;
+  metaPageId?: string;
+  metaPixelId?: string;
+  metaInstagramActorId?: string;
 }
 
 interface StoreSettingsContextType {
@@ -56,7 +62,13 @@ export const defaultStoreSettings: StoreSettings = {
       title: "Offer follow-up",
       message: "Hello {{name}}, your selected Saiksha pieces are still waiting. Use {{coupon}} while the offer is active."
     }
-  ]
+  ],
+  metaAccessToken: "",
+  metaAdAccountId: "",
+  metaAppId: "",
+  metaPageId: "",
+  metaPixelId: "",
+  metaInstagramActorId: ""
 };
 
 const StoreSettingsContext = createContext<StoreSettingsContextType | undefined>(undefined);
@@ -72,7 +84,13 @@ function normalizeSettings(data: Partial<StoreSettings>): StoreSettings {
     couponExpiresAt: data.couponExpiresAt ? String(data.couponExpiresAt).slice(0, 10) : "",
     cartLeadFollowUpTemplates: Array.isArray(data.cartLeadFollowUpTemplates) && data.cartLeadFollowUpTemplates.length > 0
       ? data.cartLeadFollowUpTemplates
-      : defaultStoreSettings.cartLeadFollowUpTemplates
+      : defaultStoreSettings.cartLeadFollowUpTemplates,
+    metaAccessToken: data.metaAccessToken || "",
+    metaAdAccountId: data.metaAdAccountId || "",
+    metaAppId: data.metaAppId || "",
+    metaPageId: data.metaPageId || "",
+    metaPixelId: data.metaPixelId || "",
+    metaInstagramActorId: data.metaInstagramActorId || ""
   };
 }
 

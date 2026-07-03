@@ -6,6 +6,7 @@ import { Product } from "../../types";
 import { cn } from "../../lib/utils";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
+import { trackMetaEvent } from "../MetaPixel";
 
 interface ProductCardProps {
   product: Product;
@@ -50,6 +51,14 @@ export default function ProductCard({ product, className }: ProductCardProps) {
     e.stopPropagation();
     if (isOutOfStock) return;
     addToCart(product);
+    trackMetaEvent("AddToCart", {
+      content_ids: [product.id],
+      content_name: product.name,
+      content_type: "product",
+      value: product.isSale && product.salePrice ? product.salePrice : product.price,
+      currency: "INR",
+      contents: [{ id: product.id, quantity: 1 }]
+    });
   };
 
   return (
