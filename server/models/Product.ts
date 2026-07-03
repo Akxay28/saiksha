@@ -10,6 +10,7 @@ export interface IProduct {
   rating: number;
   reviews: number;
   isNew?: boolean;
+  isTrending?: boolean;
   isLimited?: boolean;
   isCustom?: boolean;
   customText?: string;
@@ -53,6 +54,7 @@ const ProductSchema: Schema = new Schema(
     rating: { type: Number, required: true },
     reviews: { type: Number, required: true },
     isNew: { type: Boolean },
+    isTrending: { type: Boolean },
     isLimited: { type: Boolean },
     isCustom: { type: Boolean },
     customText: { type: String },

@@ -16,13 +16,13 @@ export default function Products() {
   const [activeGuide, setActiveGuide] = useState<number | null>(null);
 
   const activeCategory = searchParams.get("category") || "ALL PRODUCTS";
+  const activeFilter = searchParams.get("filter") || "ALL PRODUCTS";
   const searchQuery = searchParams.get("search")?.trim() || "";
 
   const categories = [
     "ALL PRODUCTS",
     "NEW ARRIVALS",
     "TRENDING",
-    "HANDCRAFTED",
     "LIMITED EDITION",
     "UNDER ₹5,000",
     "GIFTING"
@@ -43,11 +43,6 @@ export default function Products() {
       title: "Trending Masterpieces",
       subtitle: "Our most coveted, highest-rated pieces of the season, loved by our community.",
       image: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&q=80&w=2000"
-    },
-    "HANDCRAFTED": {
-      title: "Handcrafted Heritage",
-      subtitle: "Heirloom jewelry sculpted slowly with care, utilizing high-polish solid plating.",
-      image: "https://images.unsplash.com/photo-1588444837495-c6cfaf5e3230?auto=format&fit=crop&q=80&w=2000"
     },
     "LIMITED EDITION": {
       title: "Limited Editions",
@@ -99,16 +94,19 @@ export default function Products() {
   };
 
   const currentContent = categoryContent[activeCategory as keyof typeof categoryContent] || categoryContent["ALL PRODUCTS"];
+  const filteredScopeLabel = activeCategory === "ALL PRODUCTS" ? "the full collection" : currentContent.title.toLowerCase();
   const heroTitle = searchQuery ? `Search: ${searchQuery}` : currentContent.title;
   const heroSubtitle = searchQuery
     ? "Browse matching Saiksha pieces by product name, category, materials, stones, and description."
-    : currentContent.subtitle;
+    : activeFilter !== "ALL PRODUCTS"
+      ? `Showing ${activeFilter.toLowerCase()} pieces within ${filteredScopeLabel}.`
+      : currentContent.subtitle;
 
   useEffect(() => {
     const path = `/collection${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
     applySeo({
       title: `${heroTitle} | Saiksha Jewelry Collection`,
-      description: `${heroSubtitle} Shop handcrafted earrings, necklaces, bestsellers, and gift-ready jewelry across India.`,
+      description: `${heroSubtitle} Shop earrings, necklaces, bestsellers, and gift-ready jewelry across India.`,
       path,
       structuredData: {
         "@context": "https://schema.org",
@@ -123,25 +121,7 @@ export default function Products() {
   const filteredProducts = useMemo(() => {
     let result = [...products];
 
-    if (activeCategory === "NEW ARRIVALS") {
-      result = result.filter(p => p.isNew || p.category === "New Arrivals");
-    } else if (activeCategory === "TRENDING") {
-      result = result.filter(p => p.rating >= 4.8 || p.category === "Bestsellers");
-    } else if (activeCategory === "HANDCRAFTED") {
-      result = result.filter(p =>
-        p.description.toLowerCase().includes("handcraft") ||
-        p.description.toLowerCase().includes("artisan") ||
-        p.description.toLowerCase().includes("intricate") ||
-        p.description.toLowerCase().includes("delicate") ||
-        p.description.toLowerCase().includes("custom")
-      );
-    } else if (activeCategory === "LIMITED EDITION") {
-      result = result.filter(p => p.isLimited === true);
-    } else if (activeCategory === "UNDER ₹5,000") {
-      result = result.filter(p => p.price < 5000);
-    } else if (activeCategory === "GIFTING") {
-      result = result.filter(p => p.category === "Gifts" || p.name.toLowerCase().includes("gift") || p.name.toLowerCase().includes("set") || p.name.toLowerCase().includes("chest") || p.name.toLowerCase().includes("bundle") || p.name.toLowerCase().includes("box"));
-    } else if (activeCategory === "Earrings") {
+    if (activeCategory === "Earrings") {
       result = result.filter(p => p.category === "Earrings");
     } else if (activeCategory === "Necklaces") {
       result = result.filter(p => p.category === "Necklaces");
@@ -149,6 +129,18 @@ export default function Products() {
       result = result.filter(p => p.category === "Bestsellers");
     } else if (activeCategory === "Gifts") {
       result = result.filter(p => p.category === "Gifts");
+    }
+
+    if (activeFilter === "NEW ARRIVALS") {
+      result = result.filter(p => p.isNew || p.category === "New Arrivals");
+    } else if (activeFilter === "TRENDING") {
+      result = result.filter(p => p.isTrending);
+    } else if (activeFilter === "LIMITED EDITION") {
+      result = result.filter(p => p.isLimited === true);
+    } else if (activeFilter === "UNDER ₹5,000") {
+      result = result.filter(p => p.price < 5000);
+    } else if (activeFilter === "GIFTING") {
+      result = result.filter(p => p.category === "Gifts" || p.name.toLowerCase().includes("gift") || p.name.toLowerCase().includes("set") || p.name.toLowerCase().includes("chest") || p.name.toLowerCase().includes("bundle") || p.name.toLowerCase().includes("box"));
     }
 
     if (searchQuery) {
@@ -179,7 +171,7 @@ export default function Products() {
     }
 
     return result;
-  }, [activeCategory, products, searchQuery, sortBy]);
+  }, [activeCategory, activeFilter, products, searchQuery, sortBy]);
 
   useEffect(() => {
     if (!searchQuery || searchQuery.length < 2) return;
@@ -198,9 +190,9 @@ export default function Products() {
 
   const toggleCategory = (cat: string) => {
     if (cat === "ALL PRODUCTS") {
-      searchParams.delete("category");
+      searchParams.delete("filter");
     } else {
-      searchParams.set("category", cat);
+      searchParams.set("filter", cat);
     }
     searchParams.delete("search");
     setSearchParams(searchParams);
@@ -279,21 +271,26 @@ export default function Products() {
               </div>
             )}
             <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-              <div className="flex items-center space-x-6 overflow-x-auto w-full no-scrollbar">
-                {categories.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => toggleCategory(cat)}
-                    className={cn(
-                      "whitespace-nowrap text-[10px] md:text-[11px] uppercase tracking-[1.5px] font-bold transition-all border-b-2 pb-1",
-                      activeCategory === cat
-                        ? "text-brand-ink border-brand-rosegold"
-                        : "text-neutral-400 border-transparent hover:text-brand-ink"
-                    )}
-                  >
-                    {cat}
-                  </button>
-                ))}
+              <div className="w-full space-y-3 overflow-hidden">
+                <p className="text-[9px] uppercase tracking-[2px] text-neutral-400 font-bold">
+                  Filtering within {activeCategory === "ALL PRODUCTS" ? "all products" : activeCategory}
+                </p>
+                <div className="flex items-center space-x-6 overflow-x-auto w-full no-scrollbar">
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => toggleCategory(cat)}
+                      className={cn(
+                        "whitespace-nowrap text-[10px] md:text-[11px] uppercase tracking-[1.5px] font-bold transition-all border-b-2 pb-1 cursor-pointer",
+                        activeFilter === cat
+                          ? "text-brand-ink border-brand-rosegold"
+                          : "text-neutral-400 border-transparent hover:text-brand-ink"
+                      )}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="flex items-center space-x-4 shrink-0">
@@ -324,7 +321,7 @@ export default function Products() {
               <p className="text-neutral-500 font-serif text-xl">No pieces found in this category yet.</p>
               <button
                 onClick={() => {
-                  searchParams.delete("category");
+                  searchParams.delete("filter");
                   searchParams.delete("search");
                   setSearchParams(searchParams);
                 }}

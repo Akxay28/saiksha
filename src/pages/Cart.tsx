@@ -9,17 +9,15 @@ import { motion } from "motion/react";
 import RecentlyViewedProducts from "../components/sections/RecentlyViewedProducts";
 
 export default function Cart() {
-  const { cart, addToCart, removeFromCart, updateQuantity, cartTotal, appliedCoupon, couponDiscountPercent, autoDiscountCampaign, hasCampaignFreeShipping, applyCoupon, clearCoupon } = useCart();
+  const { cart, addToCart, removeFromCart, updateQuantity, cartTotal, appliedCoupon, couponDiscountPercent, applyCoupon, clearCoupon } = useCart();
   const { products } = useProducts();
   const { settings } = useStoreSettings();
   const [couponInput, setCouponInput] = React.useState(appliedCoupon || "");
 
-  const freeShippingThreshold = Math.max(0, Number(settings.freeShippingThreshold || 0));
-  const discountAmount = Math.round((cartTotal * couponDiscountPercent) / 100);
+  const discountAmount = 0;
   const discountedSubtotal = Math.max(0, cartTotal - discountAmount);
-  const remainingForFreeShipping = Math.max(0, freeShippingThreshold - discountedSubtotal);
-  const hasFreeShipping = hasCampaignFreeShipping || freeShippingThreshold === 0 || discountedSubtotal >= freeShippingThreshold;
-  const shipping: number = hasFreeShipping ? 0 : 40;
+  const hasFreeShipping = true;
+  const shipping = 0;
   const total = discountedSubtotal + shipping;
   const cartIds = new Set(cart.map((item) => item.id));
   const recommendedProducts = products
@@ -217,50 +215,15 @@ export default function Cart() {
             <div className="space-y-5">
               <div className={cn(
                 "rounded-xl border p-4 text-xs",
-                hasFreeShipping ? "border-green-100 bg-green-50 text-green-700" : "border-amber-100 bg-amber-50 text-amber-700"
+                "border-green-100 bg-green-50 text-green-700"
               )}>
                 <p className="font-bold">
-                  {hasFreeShipping ? "Free shipping unlocked" : `Add Rs ${remainingForFreeShipping.toLocaleString()} more for free shipping`}
+                  Free shipping applied
                 </p>
                 <p className="mt-1 text-[10px] opacity-80">
-                  {hasFreeShipping
-                    ? settings.shippingNote
-                    : `Free shipping starts at Rs ${freeShippingThreshold.toLocaleString()}.`}
+                  {settings.shippingNote || "No shipping charge on this order."}
                 </p>
               </div>
-
-              <form onSubmit={handleApplyCoupon} className="rounded-xl border border-brand-rosegold/20 bg-brand-cream/25 p-4 space-y-3">
-                <div>
-                  <p className="text-xs font-bold text-[#7a603c]">{settings.couponText || "Have a coupon code?"}</p>
-                  {appliedCoupon && (
-                    <p className="mt-1 text-[10px] uppercase tracking-widest text-green-700">
-                      {appliedCoupon} applied - {couponDiscountPercent}% off
-                    </p>
-                  )}
-                  {!appliedCoupon && autoDiscountCampaign?.type === "Percent Off" && (
-                    <p className="mt-1 text-[10px] uppercase tracking-widest text-green-700">
-                      {autoDiscountCampaign.badgeText || autoDiscountCampaign.title} applied automatically
-                    </p>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    value={couponInput}
-                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                    placeholder={settings.couponCode || "Coupon code"}
-                    className="min-w-0 flex-1 rounded-lg border border-brand-rosegold/20 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider outline-none focus:border-brand-rosegold"
-                  />
-                  {appliedCoupon ? (
-                    <button type="button" onClick={clearCoupon} className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 cursor-pointer">
-                      Remove
-                    </button>
-                  ) : (
-                    <button type="submit" className="rounded-lg bg-brand-ink px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white cursor-pointer">
-                      Apply
-                    </button>
-                  )}
-                </div>
-              </form>
 
               <div className="flex justify-between text-neutral-400 text-sm font-light">
                 <span>Selection Subtotal</span>
@@ -268,7 +231,7 @@ export default function Cart() {
               </div>
               {discountAmount > 0 && (
                 <div className="flex justify-between text-sm font-light text-green-600">
-                  <span>Discount ({appliedCoupon || autoDiscountCampaign?.title})</span>
+                  <span>Discount ({appliedCoupon})</span>
                   <span className="font-bold">- Rs {discountAmount.toLocaleString()}</span>
                 </div>
               )}

@@ -48,7 +48,7 @@ export default function BrandPhilosophy() {
             </div>
             
             <p className="text-neutral-500 font-light text-base md:text-lg leading-relaxed tracking-wide">
-              At Saiksha, we believe that jewelry is more than just an accessory—it's a storytelling medium. Each piece in our collection is meticulously handcrafted by master artisans who pour decades of heritage, passion, and meticulous detail into every single setting.
+              At Saiksha, we believe that jewelry is more than just an accessory—it's a storytelling medium. Each piece in our collection is carefully selected for style, finish, wearability, and occasion-ready appeal.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">

@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ShoppingCart, User, Heart, Search, Menu, X, Instagram, Facebook, Twitter, Phone, ArrowRight, Star, Filter, ChevronRight, Plus, Minus, Trash2 } from "lucide-react";
 import { Toaster } from "sonner";
@@ -28,6 +28,7 @@ import Account from "./pages/Account";
 import Auth from "./pages/Auth";
 import AdminDashboard from "./pages/AdminDashboard";
 import Testimonials from "./pages/Testimonials";
+import HappyCustomers from "./pages/HappyCustomers";
 import About from "./pages/About";
 import CareGuide from "./pages/CareGuide";
 import Contact from "./pages/Contact";
@@ -39,8 +40,21 @@ import { applySeo, getSiteUrl, organizationJsonLd } from "./lib/seo";
 
 function ScrollToTop() {
   const { pathname, search } = useLocation();
+  const previousLocation = useRef({ pathname: "", category: "" });
+
   useEffect(() => {
-    window.scrollTo(0, 0);
+    const category = new URLSearchParams(search).get("category") || "";
+    const previous = previousLocation.current;
+    const shouldScroll =
+      previous.pathname === "" ||
+      previous.pathname !== pathname ||
+      (pathname === "/collection" && previous.category !== category);
+
+    if (shouldScroll) {
+      window.scrollTo(0, 0);
+    }
+
+    previousLocation.current = { pathname, category };
   }, [pathname, search]);
   return null;
 }
@@ -63,12 +77,12 @@ function GlobalSeo() {
 
     const pageSeo: Record<string, { title: string; description: string }> = {
       "/": {
-        title: "Saiksha | Handcrafted Luxury Jewelry",
-        description: "Shop handcrafted earrings, necklaces, bestsellers, and gift-ready jewelry from Saiksha with secure checkout and WhatsApp support across India."
+        title: "Saiksha | Curated Luxury Jewelry",
+        description: "Shop earrings, necklaces, bestsellers, and gift-ready jewelry from Saiksha with secure checkout and WhatsApp support across India."
       },
       "/about": {
-        title: "About Saiksha | Handcrafted Jewelry Brand",
-        description: "Learn about Saiksha, a handcrafted jewelry store focused on elegant earrings, necklaces, gift-ready pieces, careful packaging, and customer support across India."
+        title: "About Saiksha | Curated Jewelry Brand",
+        description: "Learn about Saiksha, a curated jewelry store focused on elegant earrings, necklaces, gift-ready pieces, careful packaging, and customer support across India."
       },
       "/contact": {
         title: "Contact Saiksha | WhatsApp Jewelry Support",
@@ -76,7 +90,7 @@ function GlobalSeo() {
       },
       "/shipping": {
         title: "Shipping, Returns & Exchange Policy | Saiksha",
-        description: "Read Saiksha shipping, delivery, return, and exchange guidance for handcrafted jewelry orders across India."
+        description: "Read Saiksha shipping, delivery, return, and exchange guidance for jewelry orders across India."
       },
       "/faq": {
         title: "Jewelry Shopping FAQs | Saiksha",
@@ -86,9 +100,13 @@ function GlobalSeo() {
         title: "Customer Reviews | Saiksha Jewelry",
         description: "Read Saiksha customer reviews and verified jewelry experiences from shoppers across India."
       },
+      "/happy-customers": {
+        title: "Happy Customers | Saiksha Jewelry",
+        description: "View Saiksha happy customer photos, jewelry styling moments, and optional Instagram profiles shared by customers."
+      },
       "/care-guide": {
         title: "Jewelry Care Guide | Saiksha",
-        description: "Learn how to care for Saiksha earrings, necklaces, and handcrafted jewelry so each piece stays beautiful for longer."
+        description: "Learn how to care for Saiksha earrings, necklaces, and jewelry so each piece stays beautiful for longer."
       },
       "/privacy": {
         title: "Privacy Policy | Saiksha",
@@ -183,6 +201,7 @@ export default function App() {
                   <Route path="/login" element={<Auth mode="login" />} />
                   <Route path="/register" element={<Auth mode="register" />} />
                   <Route path="/testimonials" element={<Testimonials />} />
+                  <Route path="/happy-customers" element={<HappyCustomers />} />
                   <Route path="/about" element={<About />} />
                   <Route path="/care-guide" element={<CareGuide />} />
                   <Route path="/contact" element={<Contact />} />

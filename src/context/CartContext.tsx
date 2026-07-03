@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { CartItem, Product } from "../types";
 import { toast } from "sonner";
 import { useStoreSettings } from "./StoreSettingsContext";
-import { DiscountCampaign, useDiscountCampaigns } from "./DiscountCampaignContext";
+import { useDiscountCampaigns } from "./DiscountCampaignContext";
 
 interface CartContextType {
   cart: CartItem[];
@@ -14,8 +14,6 @@ interface CartContextType {
   cartTotal: number;
   appliedCoupon: string | null;
   couponDiscountPercent: number;
-  autoDiscountCampaign: DiscountCampaign | null;
-  autoDiscountPercent: number;
   hasCampaignFreeShipping: boolean;
   applyCoupon: (code: string) => boolean;
   clearCoupon: () => void;
@@ -25,7 +23,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { settings } = useStoreSettings();
-  const { getBestCartCampaign, hasFreeShippingCampaign } = useDiscountCampaigns();
+  const { hasFreeShippingCampaign } = useDiscountCampaigns();
   const [showLeadModal, setShowLeadModal] = useState(false);
   const [leadName, setLeadName] = useState("");
   const [leadEmail, setLeadEmail] = useState("");
@@ -40,7 +38,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   });
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("saiksha-applied-coupon");
+      localStorage.removeItem("saiksha-applied-coupon");
     }
     return null;
   });
@@ -128,10 +126,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
   const cartTotal = cart.reduce((total, item) => total + item.price * item.quantity, 0);
-  const autoDiscountCampaign = getBestCartCampaign(cart, cartTotal);
-  const autoDiscountPercent = autoDiscountCampaign?.type === "Percent Off" ? Math.max(0, Number(autoDiscountCampaign.discountPercent || 0)) : 0;
   const hasCampaignFreeShipping = hasFreeShippingCampaign(cart, cartTotal);
-  const couponDiscountPercent = appliedCoupon ? Math.max(0, Number(settings.couponDiscountPercent || 0)) : autoDiscountPercent;
+  const couponDiscountPercent = 0;
 
   const applyCoupon = (code: string) => {
     const submittedCode = code.trim().toUpperCase();
@@ -152,9 +148,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       toast.error("This coupon has expired.");
       return false;
     }
-    setAppliedCoupon(activeCode);
-    toast.success(`${activeCode} applied for ${settings.couponDiscountPercent}% off.`);
-    return true;
+    toast.error("Discount codes are currently disabled.");
+    return false;
   };
 
   const clearCoupon = () => {
@@ -225,8 +220,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
         cartTotal,
         appliedCoupon,
         couponDiscountPercent,
-        autoDiscountCampaign,
-        autoDiscountPercent,
         hasCampaignFreeShipping,
         applyCoupon,
         clearCoupon,

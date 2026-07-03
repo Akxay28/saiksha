@@ -184,6 +184,11 @@ export default function ProductCard({ product, className }: ProductCardProps) {
               New In
             </span>
           )}
+          {product.isTrending && (
+            <span className="bg-neutral-900 text-white text-[8px] px-2.5 py-1 uppercase tracking-[2px] font-bold shadow-sm rounded-sm">
+              Trending
+            </span>
+          )}
           {product.isLimited && (
             <span className="bg-[#ad854f] text-white text-[8px] px-2.5 py-1 uppercase tracking-[2px] font-bold shadow-sm rounded-sm">
               Limited Edition

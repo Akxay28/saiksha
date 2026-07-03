@@ -38,6 +38,7 @@ import {
   , Megaphone
   , Send
   , Tag
+  , Instagram
 } from "lucide-react";
 import { useProducts } from "../context/ProductContext";
 import { Product } from "../types";
@@ -66,9 +67,10 @@ interface AdminCustomer {
 }
 
 type ProductCategoryFilter = "All" | Product["category"];
-type ProductStatusFilter = "All" | "New" | "Sale" | "Limited" | "Custom";
+type ProductStatusFilter = "All" | "New" | "Trending" | "Sale" | "Limited" | "Custom";
 type ProductStockFilter = "All" | "In Stock" | "Low Stock" | "Out of Stock";
 type ProductSortOption = "Newest" | "Name A-Z" | "Price Low" | "Price High" | "Stock Low" | "Most Viewed";
+type AdminTab = "overview" | "products" | "orders" | "customers" | "accounts" | "segments" | "discounts" | "campaigns" | "reviewAutomation" | "cartLeads" | "wishlistLeads" | "leadCaptures" | "searchAnalytics" | "happyCustomers" | "testimonials" | "settings";
 
 export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const { products, addProduct, updateProduct, deleteProduct, adjustInventory } = useProducts();
@@ -82,7 +84,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<"overview" | "products" | "orders" | "customers" | "accounts" | "segments" | "discounts" | "campaigns" | "reviewAutomation" | "cartLeads" | "wishlistLeads" | "leadCaptures" | "searchAnalytics" | "testimonials" | "settings">("overview");
+  const [activeTab, setActiveTab] = useState<AdminTab>("overview");
 
   // Orders State
   const [orders, setOrders] = useState<any[]>([]);
@@ -166,6 +168,19 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const [testimonialsPerPage, setTestimonialsPerPage] = useState(9);
   const [currentTestimonialPage, setCurrentTestimonialPage] = useState(1);
 
+  // Happy Customer Gallery State
+  const [happyCustomers, setHappyCustomers] = useState<any[]>([]);
+  const [loadingHappyCustomers, setLoadingHappyCustomers] = useState(false);
+  const [editingHappyCustomerId, setEditingHappyCustomerId] = useState<string | null>(null);
+  const [happyCustomerForm, setHappyCustomerForm] = useState({
+    imageUrl: "",
+    description: "",
+    instagramHandle: "",
+    instagramUrl: "",
+    sortOrder: 0,
+    isActive: true
+  });
+
   // Store Settings State
   const [settingsForm, setSettingsForm] = useState<StoreSettings>(settings);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -182,6 +197,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     rating: 5,
     reviews: 1,
     isNew: false,
+    isTrending: false,
     isLimited: false,
     isCustom: false,
     customText: "",
@@ -244,6 +260,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       fetchCustomerSegments();
       fetchWhatsAppCampaigns();
       fetchReviewReminders();
+      fetchHappyCustomers();
     }
   }, [isAuthenticated]);
 
@@ -386,6 +403,22 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       console.error("Error fetching testimonials:", err);
     } finally {
       setLoadingTestimonials(false);
+    }
+  };
+
+  const fetchHappyCustomers = async () => {
+    setLoadingHappyCustomers(true);
+    try {
+      const response = await fetch("/api/admin/happy-customers", { credentials: "include" });
+      if (response.ok) {
+        setHappyCustomers(await response.json());
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+      }
+    } catch (err) {
+      console.error("Error fetching happy customers:", err);
+    } finally {
+      setLoadingHappyCustomers(false);
     }
   };
 
@@ -922,6 +955,88 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     }
   };
 
+  const resetHappyCustomerForm = () => {
+    setEditingHappyCustomerId(null);
+    setHappyCustomerForm({
+      imageUrl: "",
+      description: "",
+      instagramHandle: "",
+      instagramUrl: "",
+      sortOrder: 0,
+      isActive: true
+    });
+  };
+
+  const editHappyCustomer = (customer: any) => {
+    setEditingHappyCustomerId(customer._id);
+    setHappyCustomerForm({
+      imageUrl: customer.imageUrl || "",
+      description: customer.description || "",
+      instagramHandle: customer.instagramHandle || "",
+      instagramUrl: customer.instagramUrl || "",
+      sortOrder: Number(customer.sortOrder || 0),
+      isActive: customer.isActive !== false
+    });
+  };
+
+  const handleSaveHappyCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!happyCustomerForm.imageUrl.trim()) {
+      toast.error("Please add a customer image URL.");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        editingHappyCustomerId ? `/api/admin/happy-customers/${editingHappyCustomerId}` : "/api/admin/happy-customers",
+        {
+          method: editingHappyCustomerId ? "PUT" : "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(happyCustomerForm)
+        }
+      );
+
+      if (response.ok) {
+        toast.success(editingHappyCustomerId ? "Happy customer updated." : "Happy customer added.");
+        resetHappyCustomerForm();
+        fetchHappyCustomers();
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+        toast.error("Session expired. Please log in again.");
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Could not save happy customer.");
+      }
+    } catch (err) {
+      console.error("Error saving happy customer:", err);
+      toast.error("Could not save happy customer.");
+    }
+  };
+
+  const handleDeleteHappyCustomer = async (id: string) => {
+    if (!window.confirm("Delete this happy customer gallery item?")) return;
+    try {
+      const response = await fetch(`/api/admin/happy-customers/${id}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+      if (response.ok) {
+        setHappyCustomers((prev) => prev.filter((customer) => customer._id !== id));
+        if (editingHappyCustomerId === id) resetHappyCustomerForm();
+        toast.success("Happy customer deleted.");
+      } else if (response.status === 401) {
+        setIsAuthenticated(false);
+        toast.error("Session expired. Please log in again.");
+      } else {
+        toast.error("Failed to delete happy customer.");
+      }
+    } catch (err) {
+      console.error("Error deleting happy customer:", err);
+      toast.error("Could not delete happy customer.");
+    }
+  };
+
   // Product Form helpers
   const openAddModal = () => {
     setEditingProduct(null);
@@ -934,6 +1049,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       rating: 5,
       reviews: 1,
       isNew: true,
+      isTrending: false,
       isLimited: false,
       isCustom: false,
       customText: "",
@@ -971,6 +1087,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       rating: product.rating,
       reviews: product.reviews,
       isNew: !!product.isNew,
+      isTrending: !!product.isTrending,
       isLimited: !!product.isLimited,
       isCustom: !!product.isCustom,
       customText: product.customText || "",
@@ -1043,6 +1160,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       rating: Number(formData.rating),
       reviews: Number(formData.reviews),
       isNew: formData.isNew,
+      isTrending: formData.isTrending,
       isLimited: formData.isLimited,
       isCustom: formData.isCustom,
       customText: formData.isCustom ? formData.customText : undefined,
@@ -1215,6 +1333,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     { id: "wishlistLeads" as const, label: "Wishlist Leads", count: openWishlistLeadsCount, icon: Heart },
     { id: "leadCaptures" as const, label: "Lead Captures", count: openLeadCapturesCount, icon: MessageCircle },
     { id: "searchAnalytics" as const, label: "Search Analytics", count: searchAnalytics.length, icon: Search },
+    { id: "happyCustomers" as const, label: "Happy Customers", count: happyCustomers.length, icon: Instagram },
     { id: "testimonials" as const, label: "Testimonials", count: totalReviewsCount, icon: MessageSquare },
     { id: "settings" as const, label: "Store Settings", count: null, icon: Settings }
   ];
@@ -1244,6 +1363,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       if (productCategoryFilter !== "All" && product.category !== productCategoryFilter) return false;
 
       if (productStatusFilter === "New" && !product.isNew) return false;
+      if (productStatusFilter === "Trending" && !product.isTrending) return false;
       if (productStatusFilter === "Sale" && !product.isSale) return false;
       if (productStatusFilter === "Limited" && !product.isLimited) return false;
       if (productStatusFilter === "Custom" && !product.isCustom) return false;
@@ -1879,7 +1999,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                     onChange={(e) => setProductStatusFilter(e.target.value as ProductStatusFilter)}
                     className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-xs font-semibold text-neutral-700 outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
                   >
-                    {["All", "New", "Sale", "Limited", "Custom"].map((status) => (
+                    {["All", "New", "Trending", "Sale", "Limited", "Custom"].map((status) => (
                       <option key={status} value={status}>{status}</option>
                     ))}
                   </select>
@@ -3145,6 +3265,193 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
           </section>
         )}
 
+        {activeTab === "happyCustomers" && (
+          <section className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <h4 className="font-serif text-base font-bold text-neutral-900">Happy Customer Gallery</h4>
+                <p className="text-[10px] text-neutral-450 mt-0.5">Manage the customer photo gallery shown on the dedicated Happy Customers page.</p>
+              </div>
+              <button
+                onClick={fetchHappyCustomers}
+                className="text-[9px] uppercase font-bold tracking-widest text-[#a2855b] hover:text-[#7a603c] cursor-pointer"
+              >
+                Refresh Gallery
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-6">
+              <form onSubmit={handleSaveHappyCustomer} className="bg-white rounded-2xl border border-neutral-100 shadow-xs p-6 space-y-5">
+                <div>
+                  <h5 className="font-serif text-sm font-bold text-neutral-950">
+                    {editingHappyCustomerId ? "Edit Customer Photo" : "Add Customer Photo"}
+                  </h5>
+                  <p className="text-[10px] text-neutral-400 mt-1">Image is required. Description and Instagram are optional.</p>
+                </div>
+
+                <label className="space-y-1.5 block">
+                  <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Image URL *</span>
+                  <input
+                    value={happyCustomerForm.imageUrl}
+                    onChange={(e) => setHappyCustomerForm((prev) => ({ ...prev, imageUrl: e.target.value }))}
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                    placeholder="https://..."
+                    required
+                  />
+                </label>
+
+                <label className="space-y-1.5 block">
+                  <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Small Description</span>
+                  <textarea
+                    value={happyCustomerForm.description}
+                    onChange={(e) => setHappyCustomerForm((prev) => ({ ...prev, description: e.target.value }))}
+                    rows={4}
+                    maxLength={220}
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30 resize-none"
+                    placeholder="Loved styling Saiksha earrings for her special day."
+                  />
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4">
+                  <label className="space-y-1.5 block">
+                    <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Instagram Handle</span>
+                    <input
+                      value={happyCustomerForm.instagramHandle}
+                      onChange={(e) => setHappyCustomerForm((prev) => ({ ...prev, instagramHandle: e.target.value }))}
+                      className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                      placeholder="@customer"
+                    />
+                  </label>
+
+                  <label className="space-y-1.5 block">
+                    <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Instagram URL</span>
+                    <input
+                      value={happyCustomerForm.instagramUrl}
+                      onChange={(e) => setHappyCustomerForm((prev) => ({ ...prev, instagramUrl: e.target.value }))}
+                      className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                      placeholder="https://instagram.com/..."
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="space-y-1.5 block">
+                    <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Sort Order</span>
+                    <input
+                      type="number"
+                      value={happyCustomerForm.sortOrder}
+                      onChange={(e) => setHappyCustomerForm((prev) => ({ ...prev, sortOrder: Number(e.target.value) }))}
+                      className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-rosegold focus:ring-1 focus:ring-brand-rosegold/30"
+                    />
+                  </label>
+
+                  <label className="flex items-end gap-2 pb-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={happyCustomerForm.isActive}
+                      onChange={(e) => setHappyCustomerForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                      className="h-4 w-4 accent-brand-rosegold cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-neutral-600">Show on website</span>
+                  </label>
+                </div>
+
+                {happyCustomerForm.imageUrl && (
+                  <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-3">
+                    <img
+                      src={happyCustomerForm.imageUrl}
+                      alt="Happy customer preview"
+                      className="h-48 w-full rounded-lg object-cover bg-neutral-100"
+                    />
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-brand-ink text-white rounded-lg py-3 text-[10px] uppercase tracking-widest font-bold hover:bg-brand-rosegold transition-colors cursor-pointer"
+                  >
+                    {editingHappyCustomerId ? "Update Photo" : "Add Photo"}
+                  </button>
+                  {editingHappyCustomerId && (
+                    <button
+                      type="button"
+                      onClick={resetHappyCustomerForm}
+                      className="px-4 rounded-lg border border-neutral-200 text-[10px] uppercase tracking-widest font-bold text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              <div className="bg-white rounded-2xl border border-neutral-100 shadow-xs overflow-hidden">
+                {loadingHappyCustomers ? (
+                  <div className="text-center py-16 text-xs text-neutral-400">Loading happy customers...</div>
+                ) : happyCustomers.length === 0 ? (
+                  <div className="text-center py-20 text-neutral-400 space-y-4">
+                    <Instagram size={42} className="mx-auto text-neutral-300" />
+                    <h4 className="font-serif text-sm font-bold text-neutral-500">No Happy Customers Added</h4>
+                    <p className="text-[10px] text-neutral-400 font-light">Add customer photos here and they will appear on the Happy Customers page.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-5 p-5">
+                    {happyCustomers.map((customer) => (
+                      <div key={customer._id} className="border border-neutral-100 rounded-2xl overflow-hidden bg-white shadow-xs">
+                        <div className="relative aspect-[4/3] bg-neutral-100">
+                          <img
+                            src={customer.imageUrl}
+                            alt={customer.description || "Happy customer"}
+                            className="h-full w-full object-cover"
+                          />
+                          <span className={cn(
+                            "absolute left-3 top-3 rounded-full px-2.5 py-1 text-[8px] uppercase tracking-widest font-bold",
+                            customer.isActive !== false ? "bg-green-100 text-green-700" : "bg-neutral-200 text-neutral-500"
+                          )}>
+                            {customer.isActive !== false ? "Live" : "Hidden"}
+                          </span>
+                        </div>
+                        <div className="p-4 space-y-3">
+                          <p className="min-h-[40px] text-xs leading-relaxed text-neutral-600">
+                            {customer.description || "No description added."}
+                          </p>
+                          <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-neutral-400">
+                            <span>Order {Number(customer.sortOrder || 0)}</span>
+                            {customer.instagramHandle && (
+                              <span className="inline-flex items-center gap-1 normal-case tracking-normal text-neutral-500">
+                                <Instagram size={11} />
+                                @{String(customer.instagramHandle).replace(/^@/, "")}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex gap-2 pt-2 border-t border-neutral-100">
+                            <button
+                              type="button"
+                              onClick={() => editHappyCustomer(customer)}
+                              className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-neutral-200 py-2 text-[10px] uppercase tracking-widest font-bold text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 transition-colors cursor-pointer"
+                            >
+                              <Edit size={12} />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteHappyCustomer(customer._id)}
+                              className="inline-flex items-center justify-center rounded-lg bg-red-50 px-3 py-2 text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
+                              title="Delete happy customer"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* TAB VIEW 3: TESTIMONIALS MODERATOR */}
         {activeTab === "testimonials" && (
           <section className="space-y-6">
@@ -4012,6 +4319,17 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                       className="w-4 h-4 text-brand-rosegold rounded border-neutral-300 focus:ring-brand-rosegold"
                     />
                     <span>New In Label</span>
+                  </label>
+
+                  <label className="flex items-center space-x-2 cursor-pointer py-2 font-bold text-neutral-600">
+                    <input
+                      type="checkbox"
+                      name="isTrending"
+                      checked={formData.isTrending}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, isTrending: e.target.checked }))}
+                      className="w-4 h-4 text-brand-rosegold rounded border-neutral-300 focus:ring-brand-rosegold"
+                    />
+                    <span>Trending Label</span>
                   </label>
 
                   <label className="flex items-center space-x-2 cursor-pointer py-2 font-bold text-neutral-600">

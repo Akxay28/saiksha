@@ -8,6 +8,7 @@ export interface Product {
   rating: number;
   reviews: number;
   isNew?: boolean;
+  isTrending?: boolean;
   isLimited?: boolean;
   isCustom?: boolean;
   customText?: string;

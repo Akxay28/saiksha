@@ -20,6 +20,7 @@ import LeadCapture from "./server/models/LeadCapture";
 import DiscountCampaign from "./server/models/DiscountCampaign";
 import WhatsAppCampaign from "./server/models/WhatsAppCampaign";
 import CustomerAccount from "./server/models/CustomerAccount";
+import HappyCustomer from "./server/models/HappyCustomer";
 import dns from "dns";
 import crypto from "crypto";
 
@@ -41,7 +42,7 @@ const ADMIN_COOKIE_NAME = "saiksha_admin_auth";
 const CUSTOMER_COOKIE_NAME = "saiksha_customer_auth";
 const ADMIN_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 3;
 const CUSTOMER_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
-const PUBLIC_ROUTES = ["/", "/collection", "/testimonials", "/about", "/care-guide", "/contact", "/faq", "/shipping", "/privacy"];
+const PUBLIC_ROUTES = ["/", "/collection", "/testimonials", "/happy-customers", "/about", "/care-guide", "/contact", "/faq", "/shipping", "/privacy"];
 const activeAdminSessions = new Set<string>();
 const activeCustomerSessions = new Map<string, string>();
 
@@ -1475,15 +1476,15 @@ async function startServer() {
 
   app.post("/api/checkout", async (req: Request, res: Response) => {
     try {
-      const { customer, items, subTotal, discount, shipping, total, paymentMethod } = req.body;
+      const { customer, items, paymentMethod } = req.body;
+      const subTotal = Number(req.body?.subTotal || 0);
+      const discount: number = 0;
+      const shipping: number = 0;
+      const total = Math.max(0, subTotal);
       if (!customer || !customer.firstName || !customer.lastName || !customer.email || !customer.phone || !customer.address || !customer.city || !customer.postalCode || !items || items.length === 0) {
         return res.status(400).json({ error: "Missing required checkout details" });
       }
 
-      const discountValidation = await validateCheckoutDiscountWithCampaigns(Number(subTotal || 0), Number(discount || 0), items || []);
-      if (!discountValidation.valid) {
-        return res.status(400).json({ error: discountValidation.error });
-      }
       const customerAccount = await getCustomerAccountFromRequest(req);
 
       // Generate random order ID
@@ -1496,7 +1497,7 @@ async function startServer() {
         customer,
         items,
         subTotal,
-        discount: discount || 0,
+        discount,
         shipping,
         total,
         paymentMethod,
@@ -1687,11 +1688,11 @@ async function startServer() {
         razorpay_signature,
         customer,
         items,
-        subTotal,
-        discount,
-        shipping,
-        total
+        subTotal
       } = req.body;
+      const discount: number = 0;
+      const shipping: number = 0;
+      const total = Math.max(0, Number(subTotal || 0));
 
       if (!process.env.RAZORPAY_KEY_SECRET) {
         return res.status(500).json({ error: "Razorpay key secret is not configured" });
@@ -1707,10 +1708,6 @@ async function startServer() {
         return res.status(400).json({ error: "Payment verification failed. Invalid signature." });
       }
 
-      const discountValidation = await validateCheckoutDiscountWithCampaigns(Number(subTotal || 0), Number(discount || 0), items || []);
-      if (!discountValidation.valid) {
-        return res.status(400).json({ error: discountValidation.error });
-      }
       const customerAccount = await getCustomerAccountFromRequest(req);
 
       // Generate random order ID
@@ -1896,6 +1893,16 @@ async function startServer() {
     } catch (error) {
       console.error("Error fetching orders for admin:", error);
       res.status(500).json({ error: "Failed to fetch orders from database" });
+    }
+  });
+
+  app.get("/api/happy-customers", async (_req: Request, res: Response) => {
+    try {
+      const customers = await HappyCustomer.find({ isActive: true }).sort({ sortOrder: 1, createdAt: -1 });
+      res.json(customers);
+    } catch (error) {
+      console.error("Error fetching happy customer gallery:", error);
+      res.status(500).json({ error: "Failed to fetch happy customer gallery" });
     }
   });
 
@@ -2323,6 +2330,74 @@ async function startServer() {
       `Sitemap: ${siteOrigin}/sitemap.xml`,
       "",
     ].join("\n"));
+  });
+
+  app.get("/api/admin/happy-customers", checkAdminAuth, async (_req: Request, res: Response) => {
+    try {
+      const customers = await HappyCustomer.find({}).sort({ sortOrder: 1, createdAt: -1 });
+      res.json(customers);
+    } catch (error) {
+      console.error("Error fetching admin happy customers:", error);
+      res.status(500).json({ error: "Failed to fetch happy customers" });
+    }
+  });
+
+  app.post("/api/admin/happy-customers", checkAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const body = req.body || {};
+      const imageUrl = String(body.imageUrl || "").trim().slice(0, 600);
+      if (!imageUrl) return res.status(400).json({ error: "Image URL is required" });
+
+      const customer = await HappyCustomer.create({
+        imageUrl,
+        description: String(body.description || "").trim().slice(0, 220),
+        instagramHandle: String(body.instagramHandle || "").trim().replace(/^@/, "").slice(0, 80),
+        instagramUrl: String(body.instagramUrl || "").trim().slice(0, 300),
+        isActive: body.isActive !== false,
+        sortOrder: Number(body.sortOrder || 0)
+      });
+      res.status(201).json(customer);
+    } catch (error) {
+      console.error("Error creating happy customer:", error);
+      res.status(500).json({ error: "Failed to create happy customer" });
+    }
+  });
+
+  app.put("/api/admin/happy-customers/:id", checkAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const body = req.body || {};
+      const imageUrl = String(body.imageUrl || "").trim().slice(0, 600);
+      if (!imageUrl) return res.status(400).json({ error: "Image URL is required" });
+
+      const customer = await HappyCustomer.findByIdAndUpdate(
+        req.params.id,
+        {
+          imageUrl,
+          description: String(body.description || "").trim().slice(0, 220),
+          instagramHandle: String(body.instagramHandle || "").trim().replace(/^@/, "").slice(0, 80),
+          instagramUrl: String(body.instagramUrl || "").trim().slice(0, 300),
+          isActive: body.isActive !== false,
+          sortOrder: Number(body.sortOrder || 0)
+        },
+        { returnDocument: "after" }
+      );
+      if (!customer) return res.status(404).json({ error: "Happy customer not found" });
+      res.json(customer);
+    } catch (error) {
+      console.error("Error updating happy customer:", error);
+      res.status(500).json({ error: "Failed to update happy customer" });
+    }
+  });
+
+  app.delete("/api/admin/happy-customers/:id", checkAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const deleted = await HappyCustomer.findByIdAndDelete(req.params.id);
+      if (!deleted) return res.status(404).json({ error: "Happy customer not found" });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting happy customer:", error);
+      res.status(500).json({ error: "Failed to delete happy customer" });
+    }
   });
 
   app.get("/sitemap.xml", async (req: Request, res: Response) => {

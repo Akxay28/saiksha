@@ -60,7 +60,7 @@ export default function Footer() {
                 <h2 className="text-2xl md:text-3xl font-serif text-white tracking-[6px] uppercase font-bold">Saiksha</h2>
               </div>
               <p className="text-neutral-400 font-light text-sm max-w-md leading-relaxed tracking-wide">
-                Saiksha is a testament to the enduring beauty of handcrafted luxury. From ethically sourced precious materials to our commitment to eternal design, our legacy transcends seasons.
+                Saiksha is a destination for curated luxury-inspired jewelry, gift-ready styling, and elegant everyday pieces selected for modern occasions.
               </p>
             </div>
 
@@ -103,7 +103,7 @@ export default function Footer() {
                     </div>
 
                     <span className="text-xs text-neutral-400 font-light group-hover:text-white transition">
-                      @saiksha_jewels
+                      @saiksha.jewels
                     </span>
                   </a>
 
@@ -122,6 +122,14 @@ export default function Footer() {
                       Saiksha Jewelry
                     </span>
                   </a>
+                  <Link to="/happy-customers" className="flex items-center space-x-3 w-fit group">
+                    <div className="w-9 h-9 rounded-full bg-white/5 hover:bg-brand-rosegold/30 hover:text-white flex items-center justify-center text-neutral-400 transition-all border border-white/10">
+                      <Instagram size={16} />
+                    </div>
+                    <span className="text-xs text-neutral-400 font-light group-hover:text-white transition">
+                      Happy Customers
+                    </span>
+                  </Link>
                 </div>
               </div>
             </div>

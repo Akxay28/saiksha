@@ -27,7 +27,7 @@ export default function Checkout() {
   const { products } = useProducts();
   const { settings } = useStoreSettings();
   const { customer } = useCustomerAuth();
-  const { cart, cartTotal, clearCart, appliedCoupon, couponDiscountPercent, autoDiscountCampaign, hasCampaignFreeShipping, applyCoupon, clearCoupon } = useCart();
+  const { cart, cartTotal, clearCart, appliedCoupon, couponDiscountPercent, applyCoupon, clearCoupon } = useCart();
   const [couponInput, setCouponInput] = useState(appliedCoupon || "");
   const [step, setStep] = useState(1); // 1: Shipping, 2: Payment, 3: Review
   
@@ -148,12 +148,10 @@ export default function Checkout() {
     ? cartTotal 
     : checkoutItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-  const freeShippingThreshold = Math.max(0, Number(settings.freeShippingThreshold || 0));
-  const discount = Math.round((subTotal * couponDiscountPercent) / 100);
+  const discount = 0;
   const discountedSubtotal = Math.max(0, subTotal - discount);
-  const hasFreeShipping = hasCampaignFreeShipping || freeShippingThreshold === 0 || discountedSubtotal >= freeShippingThreshold;
-  const remainingForFreeShipping = Math.max(0, freeShippingThreshold - discountedSubtotal);
-  const shipping = hasFreeShipping ? 0 : 40;
+  const hasFreeShipping = true;
+  const shipping = 0;
   const total = discountedSubtotal + shipping;
 
   const handleApplyCoupon = (e: React.FormEvent) => {
@@ -634,52 +632,25 @@ export default function Checkout() {
 
                 <div className={cn(
                   "flex items-center gap-3 rounded-2xl border px-5 py-3.5",
-                  hasFreeShipping ? "bg-green-50 border-green-100" : "bg-amber-50 border-amber-100"
+                  "bg-green-50 border-green-100"
                 )}>
-                  <Truck className={cn("shrink-0", hasFreeShipping ? "text-green-500" : "text-amber-500")} size={18} />
+                  <Truck className="shrink-0 text-green-500" size={18} />
                   <div>
-                    <p className={cn("text-xs font-bold", hasFreeShipping ? "text-green-700" : "text-amber-700")}>
-                      {hasFreeShipping ? "You've unlocked FREE Shipping!" : `Add Rs ${remainingForFreeShipping.toLocaleString()} more for free shipping`}
+                    <p className="text-xs font-bold text-green-700">
+                      Free shipping applied
                     </p>
-                    <p className={cn("text-[10px] mt-0.5", hasFreeShipping ? "text-green-600" : "text-amber-600")}>
-                      {hasFreeShipping ? settings.shippingNote : `Free shipping starts at Rs ${freeShippingThreshold.toLocaleString()}.`}
+                    <p className="text-[10px] mt-0.5 text-green-600">
+                      {settings.shippingNote || "No shipping charge on this order."}
                     </p>
                   </div>
                 </div>
-
-                <form onSubmit={handleApplyCoupon} className="rounded-2xl border border-brand-rosegold/20 bg-brand-cream/30 px-5 py-3.5 space-y-3">
-                  <div>
-                    <p className="text-xs font-bold text-[#7a603c]">{settings.couponText || "Have a coupon code?"}</p>
-                    {appliedCoupon && <p className="mt-1 text-[9px] uppercase tracking-widest text-green-700">{appliedCoupon} applied - {couponDiscountPercent}% off</p>}
-                    {!appliedCoupon && autoDiscountCampaign?.type === "Percent Off" && (
-                      <p className="mt-1 text-[9px] uppercase tracking-widest text-green-700">{autoDiscountCampaign.badgeText || autoDiscountCampaign.title} applied automatically</p>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      value={couponInput}
-                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                      placeholder={settings.couponCode || "Coupon code"}
-                      className="min-w-0 flex-1 rounded-lg border border-brand-rosegold/20 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider outline-none focus:border-brand-rosegold"
-                    />
-                    {appliedCoupon ? (
-                      <button type="button" onClick={clearCoupon} className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 cursor-pointer">
-                        Remove
-                      </button>
-                    ) : (
-                      <button type="submit" className="rounded-lg bg-brand-ink px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white cursor-pointer">
-                        Apply
-                      </button>
-                    )}
-                  </div>
-                </form>
 
                 {/* Free Shipping Trust Banner */}
                 <div className="hidden">
                   <div className="text-green-500 shrink-0 text-lg">🎁</div>
                   <div>
-                    <p className="text-xs font-bold text-green-700">You've unlocked FREE Shipping!</p>
-                    <p className="text-[10px] text-green-600 mt-0.5">Worth <span className="font-bold">₹40</span> — applied automatically. No extra charges, ever.</p>
+                    <p className="text-xs font-bold text-green-700">Free shipping is active.</p>
+                    <p className="text-[10px] text-green-600 mt-0.5">No shipping charge is added to your order.</p>
                   </div>
                 </div>
 
@@ -835,12 +806,12 @@ export default function Checkout() {
 
         {/* Sidebar Summary (Col spans 5) */}
         <aside className="lg:col-span-5 space-y-8">
-           <div className="bg-white rounded-3xl p-6 md:p-8 border border-brand-blush shadow-sm space-y-8">
+           <div className="bg-white rounded-3xl p-6 md:p-8 border border-brand-blush shadow-sm space-y-7 sticky top-24">
               <h3 className="text-lg font-serif font-bold text-brand-ink">Order Summary</h3>
               
-              <div className="space-y-6">
+              <div className="space-y-5">
                 {checkoutItems.map((item) => (
-                  <div key={item.id + item.name} className="flex items-center space-x-4">
+                  <div key={item.id + item.name} className="flex items-center gap-4 rounded-2xl bg-brand-cream/20 border border-brand-blush/40 p-3">
                     <div className="w-14 h-16 rounded-lg overflow-hidden border border-brand-blush shrink-0 bg-brand-cream">
                       <img src={item.images[0]} alt={item.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
                     </div>
@@ -854,14 +825,14 @@ export default function Checkout() {
                 ))}
               </div>
 
-              <div className="pt-8 border-t border-brand-blush space-y-4">
+              <div className="pt-6 border-t border-brand-blush space-y-4">
                 <div className="flex justify-between text-xs">
                   <span className="text-neutral-400 uppercase tracking-widest font-bold text-[9px]">Subtotal</span>
                   <span className="font-bold text-neutral-900">₹{subTotal.toLocaleString()}</span>
                 </div>
                 {discount > 0 && (
                   <div className="flex justify-between text-xs text-green-600">
-                    <span className="uppercase tracking-widest font-bold text-[9px]">Discount ({appliedCoupon || autoDiscountCampaign?.title})</span>
+                    <span className="uppercase tracking-widest font-bold text-[9px]">Discount ({appliedCoupon})</span>
                     <span className="font-bold">- Rs {discount.toLocaleString()}</span>
                   </div>
                 )}
@@ -871,16 +842,26 @@ export default function Checkout() {
                     {hasFreeShipping ? "FREE" : `Rs ${shipping.toLocaleString()}`}
                   </span>
                 </div>
-                {(appliedCoupon || autoDiscountCampaign) && (
-                  <div className="rounded-xl bg-green-50 border border-green-100 p-3 text-[10px] text-green-700">
-                    <p className="font-bold">{appliedCoupon || autoDiscountCampaign?.title} discount applied</p>
-                    <p className="mt-1 uppercase tracking-widest">{couponDiscountPercent}% off this order</p>
-                  </div>
-                )}
                 <div className="flex justify-between text-lg font-bold font-serif pt-4 border-t border-black/5">
                   <span>Total</span>
                   <span>₹{total.toLocaleString()}</span>
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-green-100 bg-green-50/70 p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <Truck size={17} className="text-green-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-bold text-green-700">Free shipping included</p>
+                    <p className="mt-1 text-[10px] leading-relaxed text-green-700/80">
+                      Your jewelry will be packed carefully and shipped without any delivery charge.
+                    </p>
+                  </div>
+                </div>
+                <div className="h-px bg-green-100" />
+                <p className="text-[10px] leading-relaxed text-neutral-500">
+                  Need sizing, gifting, or delivery help? Our team can confirm details with you on WhatsApp before dispatch.
+                </p>
               </div>
 
               <div className="bg-brand-sand/30 p-4 rounded-xl flex items-center space-x-3 border border-brand-blush/30">

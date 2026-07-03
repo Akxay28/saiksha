@@ -45,7 +45,7 @@ export default function Home() {
               transition={{ delay: 0.1 }}
               className="text-sm text-neutral-500 max-w-xs font-light leading-relaxed tracking-wide"
             >
-              Handcrafted jewelry for those who appreciate the finer details of modern luxury.
+              Curated jewelry for those who appreciate the finer details of modern luxury.
             </motion.p>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -175,7 +175,7 @@ export default function Home() {
         <div className="container mx-auto px-4 max-w-4xl space-y-6">
           <p className="text-[10px] uppercase tracking-[5px] text-neutral-300 font-bold">Saiksha Luxury Jewelry</p>
           <p className="text-sm text-neutral-400 leading-relaxed font-light italic">
-            "Saiksha is more than a brand; it's a testament to the enduring beauty of handcrafted luxury. From our ethically sourced materials to our commitment to timeless design, we strive to create pieces that will be cherished for generations."
+            "Saiksha is more than a brand; it's a destination for curated luxury-inspired jewelry. From careful product selection to timeless styling, we strive to offer pieces that feel special from the first wear."
           </p>
         </div>
       </section>

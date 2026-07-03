@@ -61,7 +61,7 @@ export default function GlobalBottomSections() {
                   rel="noopener noreferrer"
                   className="text-brand-rosegold font-bold hover:text-brand-hotpink"
                 >
-                  @saiksha_jewels
+                  @saiksha.jewels
                 </a>
               </p>
             </div>
@@ -94,7 +94,7 @@ export default function GlobalBottomSections() {
                 <div className="absolute inset-0 bg-brand-ink/65 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center p-4 text-center">
                   <Instagram size={24} className="text-white mb-2 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300" />
                   <span className="text-white font-mono text-xs font-medium tracking-wider transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300 delay-75">
-                    @saiksha_jewels
+                    @saiksha.jewels
                   </span>
                   <span className="text-white/60 text-[9px] uppercase tracking-[2px] mt-1 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300 delay-100">
                     Open Instagram
@@ -108,7 +108,7 @@ export default function GlobalBottomSections() {
             <div className="space-y-1">
               <p className="text-[10px] uppercase tracking-[3px] text-brand-rosegold font-bold">Have a client photo?</p>
               <p className="text-sm text-neutral-500 font-light">
-                Tag or message <span className="font-bold text-brand-ink">@saiksha_jewels</span> so shoppers can see real styling and reach the Instagram page directly.
+                Tag or message <span className="font-bold text-brand-ink">@saiksha.jewels</span> so shoppers can see real styling and reach the Instagram page directly.
               </p>
             </div>
             <Link to="/collection?search=earrings" className="inline-flex items-center justify-center gap-2 bg-brand-ink text-white px-7 py-4 text-[10px] uppercase tracking-[2px] font-bold">

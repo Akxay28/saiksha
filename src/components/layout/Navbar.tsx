@@ -90,6 +90,18 @@ export default function Navbar() {
     { name: "About", path: "/about" },
   ];
 
+  const isNavLinkActive = (path: string) => {
+    const [pathname, query = ""] = path.split("?");
+    if (pathname !== "/collection") {
+      return location.pathname === pathname;
+    }
+
+    if (location.pathname !== "/collection") return false;
+    const linkCategory = new URLSearchParams(query).get("category");
+    const currentCategory = new URLSearchParams(location.search).get("category");
+    return linkCategory ? currentCategory === linkCategory : !currentCategory;
+  };
+
   return (
     <>
       <nav
@@ -132,7 +144,7 @@ export default function Navbar() {
           {/* Desktop Nav */}
           <div className="hidden lg:flex items-center gap-9">
             {navLinks.map((link) => {
-              const isActive = location.pathname + location.search === link.path;
+              const isActive = isNavLinkActive(link.path);
               return (
                 <Link
                   key={link.name}

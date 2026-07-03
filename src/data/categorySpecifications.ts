@@ -5,7 +5,7 @@ export const categorySpecifications = {
     craftingTime: "Individually calibrated and post-set by master silversmiths over 14 crafting hours.",
     dimensions: "Approximately 20mm height x 8mm width.",
     weight: "Extremely lightweight (3.8 grams per earring) for allergen-free day and evening comfort.",
-    certification: "Every order contains a handcrafted Saiksha Authenticity Seal card validating material purities.",
+    certification: "Every order contains a Saiksha Authenticity Seal card with material and care guidance.",
     careInstructions: [
       "Store in the customized velvet storage bag and airtight casing box provided.",
       "Avoid spraying fine perfume, body oils, or applying lotions directly onto the metal surfaces.",
@@ -21,7 +21,7 @@ export const categorySpecifications = {
     craftingTime: "Chains polished slowly with traditional micro-wire techniques, taking up to 18 hours.",
     dimensions: "16-inch adjustable dainty cable chain with a custom lobster clasp lock adjustment.",
     weight: "Delicate and sleek profile (approx 5.2 grams overall heft) designed to lay optimally on the collarbones.",
-    certification: "Every order contains a handcrafted Saiksha Authenticity Seal card validating material purities.",
+    certification: "Every order contains a Saiksha Authenticity Seal card with material and care guidance.",
     careInstructions: [
       "Store flat in the luxury jewelry chest compartment to prevent chain tangles.",
       "Ensure the necklace is taken off before sleeping, exercising, or bathing.",
@@ -34,7 +34,7 @@ export const categorySpecifications = {
   "Bestsellers": {
     materials: "Heirloom-grade solid premium sterling silver, engineered with specialized anti-tarnish backing layers.",
     stones: "Brilliant-cut laboratory-grown cushion diamonds of highest brilliance ratings.",
-    craftingTime: "Sourced through customized micro-pave handcraft channels, completed in restricted batches.",
+    craftingTime: "Sourced through selected micro-pave finish channels, completed in restricted batches.",
     dimensions: "Custom statement scale, engineered to pair effortlessly with executive or event styling.",
     weight: "Perfect weight distribution (4.5 grams) ensuring comfortable extended wear.",
     certification: "Shipped with a certified Saiksha Signature Gemstone Appraisal and precious metal test report card.",
