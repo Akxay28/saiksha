@@ -71,33 +71,102 @@ export default function Auth({ mode }: AuthProps) {
 
   return (
     <div className="min-h-screen flex font-sans">
-      <div className="hidden lg:block lg:w-1/2 relative bg-neutral-900">
-        <img
-          src={mode === "login"
-            ? "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&q=80&w=1200"
-            : "https://images.unsplash.com/photo-1611085583191-a3b1a308c021?auto=format&fit=crop&q=80&w=1200"
-          }
-          alt="Luxury Jewelry"
-          referrerPolicy="no-referrer"
-          className="absolute inset-0 w-full h-full object-cover opacity-60"
+      <div className="hidden lg:block lg:w-1/2 relative bg-neutral-950 overflow-hidden">
+        <motion.div
+          className="absolute inset-0 bg-[radial-gradient(circle_at_24%_18%,rgba(255,255,255,0.16),transparent_22%),radial-gradient(circle_at_74%_62%,rgba(214,112,148,0.28),transparent_24%),linear-gradient(135deg,#111_0%,#221317_48%,#0b0b0b_100%)]"
+          animate={{ scale: [1, 1.08, 1], backgroundPosition: ["0% 0%", "100% 60%", "0% 0%"] }}
+          transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
         />
+        <motion.div
+          className="absolute -left-1/3 top-0 h-full w-2/3 rotate-12 bg-gradient-to-r from-transparent via-white/14 to-transparent blur-sm"
+          animate={{ x: ["-35%", "210%"] }}
+          transition={{ duration: 6.5, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.2 }}
+        />
+        <motion.div
+          className="absolute inset-x-[-12%] top-[24%] h-px rotate-[-18deg] bg-gradient-to-r from-transparent via-white/35 to-transparent"
+          animate={{ x: ["-8%", "8%", "-8%"], opacity: [0.25, 0.65, 0.25] }}
+          transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute inset-x-[-12%] top-[34%] h-px rotate-[-18deg] bg-gradient-to-r from-transparent via-brand-rosegold/45 to-transparent"
+          animate={{ x: ["7%", "-7%", "7%"], opacity: [0.2, 0.55, 0.2] }}
+          transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute left-[12%] top-[18%] h-64 w-64 rounded-full border border-white/10"
+          animate={{ scale: [1, 1.08, 1], rotate: [0, 8, 0] }}
+          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute left-[18%] top-[24%] h-40 w-40 rounded-full border border-brand-rosegold/20"
+          animate={{ scale: [1.08, 1, 1.08], rotate: [0, -10, 0] }}
+          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute right-[12%] bottom-[18%] h-72 w-72 rounded-full border border-white/10"
+          animate={{ scale: [1, 0.94, 1], rotate: [0, -6, 0] }}
+          transition={{ duration: 13, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute right-[18%] bottom-[24%] h-44 w-44 rounded-full border border-brand-rosegold/25"
+          animate={{ scale: [0.96, 1.06, 0.96], rotate: [0, 12, 0] }}
+          transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-rosegold/10 blur-3xl"
+          animate={{ x: [-40, 35, -40], y: [20, -30, 20], opacity: [0.25, 0.45, 0.25] }}
+          transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute left-[15%] bottom-[17%] h-3 w-3 rounded-full bg-white shadow-[0_0_22px_rgba(255,255,255,0.9)]"
+          animate={{ y: [0, -70, 0], x: [0, 34, 0], opacity: [0.25, 1, 0.25], scale: [0.7, 1.25, 0.7] }}
+          transition={{ duration: 5.8, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute right-[22%] top-[26%] h-2.5 w-2.5 rounded-full bg-brand-rosegold shadow-[0_0_24px_rgba(214,112,148,0.9)]"
+          animate={{ y: [0, 82, 0], x: [0, -42, 0], opacity: [0.3, 1, 0.3], scale: [0.8, 1.4, 0.8] }}
+          transition={{ duration: 6.4, repeat: Infinity, ease: "easeInOut", delay: 0.8 }}
+        />
+        <motion.div
+          className="absolute left-[46%] top-[16%] h-2 w-2 rounded-full bg-white/90 shadow-[0_0_18px_rgba(255,255,255,0.8)]"
+          animate={{ y: [0, 110, 0], opacity: [0.2, 0.9, 0.2], scale: [0.6, 1.2, 0.6] }}
+          transition={{ duration: 7.2, repeat: Infinity, ease: "easeInOut", delay: 1.4 }}
+        />
+        <motion.div
+          className="absolute right-[12%] top-[42%] h-36 w-36 rounded-full border border-brand-rosegold/35 border-t-white/70"
+          animate={{ rotate: [0, 360], scale: [0.96, 1.08, 0.96], opacity: [0.35, 0.75, 0.35] }}
+          transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+        />
+        <div className="absolute inset-0 bg-black/35" />
         <div className="relative z-10 p-20 h-full flex flex-col justify-between text-white">
+          <motion.div initial={{ opacity: 0, y: -14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
           <Link to="/" className="flex items-center gap-2.5 group">
             <div className="bg-white p-1 rounded-full border border-white/10 shadow shrink-0">
               <img src={logoImg} alt="Saiksha Logo" className="h-10 w-10 object-cover rounded-full" referrerPolicy="no-referrer" />
             </div>
             <span className="text-3xl font-serif font-bold tracking-wider text-white group-hover:text-brand-rosegold transition-colors">SAIKSHA</span>
           </Link>
-          <div className="space-y-6">
+          </motion.div>
+          <motion.div
+            className="space-y-6"
+            initial={{ opacity: 0, y: 28 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.85, delay: 0.15 }}
+          >
             <h2 className="text-6xl font-serif font-bold leading-tight italic">
               {mode === "login" ? "Welcome back to elegance." : "Start your journey into luxury."}
             </h2>
             <p className="text-xl opacity-80 max-w-sm">Accounts are optional. Guest checkout remains the fastest way to buy.</p>
-          </div>
-          <div className="flex items-center space-x-6 text-sm uppercase tracking-widest font-bold">
+          </motion.div>
+          <motion.div
+            className="flex items-center space-x-6 text-sm uppercase tracking-widest font-bold"
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.35 }}
+          >
             <Link to="/shipping" className="hover:text-brand-rosegold transition-colors">Shipping Info</Link>
             <Link to="/contact" className="hover:text-brand-rosegold transition-colors">Contact</Link>
-          </div>
+          </motion.div>
         </div>
       </div>
 

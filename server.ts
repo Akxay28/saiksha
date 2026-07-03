@@ -4,6 +4,7 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import Product from "./server/models/Product";
@@ -38,6 +39,8 @@ const razorpay = process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
     })
   : null;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "swatipaul285@gmail.com";
+const ORDER_EMAIL_FROM = process.env.ORDER_EMAIL_FROM || "Saiksha Orders <onboarding@resend.dev>";
+const SMTP_EMAIL_FROM = process.env.SMTP_EMAIL_FROM || process.env.SMTP_USER || "";
 const ADMIN_COOKIE_NAME = "saiksha_admin_auth";
 const CUSTOMER_COOKIE_NAME = "saiksha_customer_auth";
 const ADMIN_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 3;
@@ -45,6 +48,19 @@ const CUSTOMER_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const PUBLIC_ROUTES = ["/", "/collection", "/testimonials", "/happy-customers", "/about", "/care-guide", "/contact", "/faq", "/shipping", "/privacy"];
 const activeAdminSessions = new Set<string>();
 const activeCustomerSessions = new Map<string, string>();
+
+const smtpTransporter = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: String(process.env.SMTP_SECURE || "").toLowerCase() === "true" || Number(process.env.SMTP_PORT || 587) === 465,
+      requireTLS: String(process.env.SMTP_REQUIRE_TLS || "").toLowerCase() === "true",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    })
+  : null;
 
 function getClientIp(req: Request) {
   const forwardedFor = String(req.headers["x-forwarded-for"] || "").split(",")[0]?.trim();
@@ -122,6 +138,54 @@ function escapeXml(value: string) {
     .replace(/'/g, "&apos;");
 }
 
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatCurrency(value: unknown) {
+  return `Rs ${Number(value || 0).toLocaleString("en-IN")}`;
+}
+
+async function sendResendEmailOrThrow(payload: any) {
+  const mailer = resend;
+  if (!mailer) {
+    throw new Error("RESEND_API_KEY is not configured.");
+  }
+
+  const result: any = await mailer.emails.send(payload);
+  if (result.error) {
+    throw new Error(typeof result.error === "string" ? result.error : JSON.stringify(result.error));
+  }
+  return result.data;
+}
+
+async function sendCustomerEmailOrThrow(payload: { to: string; subject: string; html: string }) {
+  if (smtpTransporter) {
+    if (!SMTP_EMAIL_FROM) {
+      throw new Error("SMTP_EMAIL_FROM or SMTP_USER must be configured for Nodemailer.");
+    }
+
+    return smtpTransporter.sendMail({
+      from: SMTP_EMAIL_FROM,
+      to: payload.to,
+      subject: payload.subject,
+      html: payload.html
+    });
+  }
+
+  return sendResendEmailOrThrow({
+    from: ORDER_EMAIL_FROM,
+    to: payload.to,
+    subject: payload.subject,
+    html: payload.html
+  });
+}
+
 function sitemapEntry(location: string, options: { lastmod?: string; priority?: string; changefreq?: string } = {}) {
   return [
     "  <url>",
@@ -131,6 +195,106 @@ function sitemapEntry(location: string, options: { lastmod?: string; priority?: 
     options.priority ? `    <priority>${options.priority}</priority>` : "",
     "  </url>",
   ].filter(Boolean).join("\n");
+}
+
+async function sendCustomerOrderConfirmationEmail(params: {
+  orderId: string;
+  customer: any;
+  items: any[];
+  subTotal: number;
+  shipping: number;
+  total: number;
+  paymentMethod: string;
+  paymentStatus?: string;
+  siteOrigin: string;
+}) {
+  if (!smtpTransporter && !resend) {
+    console.warn("No SMTP settings or RESEND_API_KEY found. Customer order confirmation email not sent.");
+    return;
+  }
+
+  const email = String(params.customer?.email || "").trim();
+  if (!email || !email.includes("@")) return;
+
+  const customerName = `${params.customer?.firstName || ""} ${params.customer?.lastName || ""}`.trim() || "Customer";
+  const itemsHtml = params.items.map((item: any) => `
+    <tr>
+      <td style="padding: 12px 0; border-bottom: 1px solid #eee;">
+        <strong style="display: block; color: #111;">${escapeHtml(item.name)}</strong>
+        <span style="font-size: 12px; color: #777;">Qty ${escapeHtml(item.quantity)}${item.category ? ` - ${escapeHtml(item.category)}` : ""}</span>
+      </td>
+      <td style="padding: 12px 0; border-bottom: 1px solid #eee; text-align: right; font-weight: 700; color: #111;">
+        ${formatCurrency(Number(item.price || 0) * Number(item.quantity || 1))}
+      </td>
+    </tr>
+  `).join("");
+
+  const html = `
+    <div style="margin:0; padding:0; background:#faf9f6; font-family:Arial, Helvetica, sans-serif; color:#171717;">
+      <div style="max-width:640px; margin:0 auto; padding:28px 16px;">
+        <div style="background:#111; color:#fff; padding:28px; text-align:center; border-radius:10px 10px 0 0;">
+          <div style="font-family:Georgia, serif; letter-spacing:5px; font-size:26px;">SAIKSHA</div>
+          <div style="margin-top:8px; font-size:11px; letter-spacing:2px; text-transform:uppercase; color:#d7b7c5;">Order Confirmed Successfully</div>
+        </div>
+        <div style="background:#fff; border:1px solid #eee; border-top:0; border-radius:0 0 10px 10px; padding:30px;">
+          <p style="margin:0 0 14px; font-size:15px;">Hi ${escapeHtml(customerName)},</p>
+          <p style="margin:0 0 22px; line-height:1.7; color:#555; font-size:14px;">
+            Thank you for shopping with Saiksha. Your order has been received successfully and our team will prepare it for dispatch.
+          </p>
+
+          <div style="background:#faf9f6; border:1px solid #eee; border-radius:8px; padding:18px; margin-bottom:24px;">
+            <div style="font-size:11px; color:#888; text-transform:uppercase; letter-spacing:1.5px;">Order ID</div>
+            <div style="font-size:20px; font-weight:700; color:#111; margin-top:5px;">${escapeHtml(params.orderId)}</div>
+            <div style="font-size:13px; color:#666; margin-top:10px;">
+              Payment: <strong>${escapeHtml(params.paymentMethod)}</strong>${params.paymentStatus ? ` - ${escapeHtml(params.paymentStatus)}` : ""}
+            </div>
+          </div>
+
+          <h2 style="font-family:Georgia, serif; font-size:18px; margin:0 0 12px;">Order Summary</h2>
+          <table style="width:100%; border-collapse:collapse; font-size:14px;">
+            <tbody>${itemsHtml}</tbody>
+          </table>
+
+          <table style="width:100%; border-collapse:collapse; margin-top:18px; font-size:14px;">
+            <tr>
+              <td style="padding:6px 0; color:#666;">Subtotal</td>
+              <td style="padding:6px 0; text-align:right; font-weight:700;">${formatCurrency(params.subTotal)}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0; color:#666;">Shipping</td>
+              <td style="padding:6px 0; text-align:right; font-weight:700; color:#047857;">${Number(params.shipping || 0) === 0 ? "FREE" : formatCurrency(params.shipping)}</td>
+            </tr>
+            <tr>
+              <td style="padding:14px 0 0; border-top:1px dashed #ddd; font-family:Georgia, serif; font-size:18px; font-weight:700;">Total</td>
+              <td style="padding:14px 0 0; border-top:1px dashed #ddd; text-align:right; font-size:18px; font-weight:800;">${formatCurrency(params.total)}</td>
+            </tr>
+          </table>
+
+          <div style="margin-top:24px; padding:18px; border:1px solid #f0dbe4; border-radius:8px; background:#fff8fb;">
+            <div style="font-size:12px; color:#777; line-height:1.7;">
+              Delivery address:<br />
+              <strong style="color:#111;">${escapeHtml(params.customer?.address)}</strong><br />
+              ${escapeHtml(params.customer?.city)} - ${escapeHtml(params.customer?.postalCode)}
+            </div>
+          </div>
+
+          <p style="margin:24px 0 0; color:#666; font-size:13px; line-height:1.7;">
+            You can contact us on WhatsApp for any update or styling help. Please keep your Order ID handy.
+          </p>
+
+          <div style="text-align:center; margin-top:26px;">
+            <a href="${escapeHtml(params.siteOrigin)}" style="display:inline-block; background:#111; color:#fff; padding:13px 22px; border-radius:4px; text-decoration:none; font-size:11px; letter-spacing:2px; text-transform:uppercase; font-weight:700;">Visit Saiksha</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  await sendCustomerEmailOrThrow({
+    to: email,
+    subject: `Your Saiksha order is confirmed - ${params.orderId}`,
+    html
+  });
 }
 
 // Connect to MongoDB Atlas
@@ -1652,6 +1816,22 @@ async function startServer() {
         console.warn("RESEND_API_KEY is not set. Silent checkout email not sent.");
       }
 
+      try {
+        await sendCustomerOrderConfirmationEmail({
+          orderId,
+          customer,
+          items,
+          subTotal,
+          shipping,
+          total,
+          paymentMethod: paymentMethod || "Cash on Delivery",
+          paymentStatus: "Order received",
+          siteOrigin: getSiteOrigin(req)
+        });
+      } catch (emailErr) {
+        console.error("Error sending customer order confirmation email:", emailErr);
+      }
+
       res.status(201).json({ success: true, orderId, order: newOrder });
     } catch (error) {
       console.error("Error saving checkout order:", error);
@@ -1876,6 +2056,22 @@ async function startServer() {
         } catch (emailErr) {
           console.error("Error sending paid order email:", emailErr);
         }
+      }
+
+      try {
+        await sendCustomerOrderConfirmationEmail({
+          orderId,
+          customer,
+          items,
+          subTotal: Number(subTotal || 0),
+          shipping,
+          total,
+          paymentMethod: "Online Payment",
+          paymentStatus: "Paid",
+          siteOrigin: getSiteOrigin(req)
+        });
+      } catch (emailErr) {
+        console.error("Error sending customer paid order confirmation email:", emailErr);
       }
 
       res.json({ success: true, orderId, order: newOrder });
