@@ -1,0 +1,18 @@
+[
+  {
+    "key": "store",
+    "storeName": "Saiksha",
+    "announcementEnabled": true,
+    "announcementText": "✨ Elevate Your Style with Saiksha Artisan Jewelry - Premium Quality Guaranteed ✨",
+    "whatsappNumber": "917383055032",
+    "supportPhone": "+91 73830 55032",
+    "supportEmail": "support@saiksha.com",
+    "instagramUrl": "https://instagram.com/saiksha_jewelry",
+    "freeShippingThreshold": 4900,
+    "couponCode": "SAIKSHA10",
+    "couponDiscountPercent": 10,
+    "couponText": "Use SAIKSHA10 for flat 10% off on premium collections",
+    "shippingNote": "Free shipping above Rs 4900",
+    "returnPolicy": "Smooth 15-day exchange and replacement policy."
+  }
+]

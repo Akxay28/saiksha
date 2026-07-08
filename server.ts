@@ -7,6 +7,7 @@ import { Resend } from "resend";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
+import "./server/mongoose-fallback";
 import Product from "./server/models/Product";
 import Testimonial from "./server/models/Testimonial";
 import Order from "./server/models/Order";
@@ -315,14 +316,23 @@ async function sendCustomerOrderConfirmationEmail(params: {
 }
 
 // Connect to MongoDB Atlas
+let lastMongoError: string | null = null;
 const MONGODB_URI = process.env.MONGODB_URI;
 if (MONGODB_URI) {
   mongoose
-    .connect(MONGODB_URI)
-    .then(() => console.log("Successfully connected to MongoDB Atlas."))
-    .catch((err) => console.error("Error connecting to MongoDB Atlas:", err));
+    .connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 2500, // Timeout connection quickly if blocked by IP whitelisting
+    })
+    .then(() => {
+      console.log("Successfully connected to MongoDB Atlas.");
+      lastMongoError = null;
+    })
+    .catch((err) => {
+      lastMongoError = err.message || String(err);
+      console.warn("Could not connect to live MongoDB Atlas. Falling back to robust local database storage. Error:", err.message);
+    });
 } else {
-  console.warn("WARNING: MONGODB_URI is not set in environment variables. Running with DB features disabled.");
+  console.warn("WARNING: MONGODB_URI is not set in environment variables. Running with local database storage.");
 }
 
 // ── Live Visitor Tracking (SSE, in-memory) ──────────────────────────────────
@@ -534,6 +544,7 @@ async function startServer() {
   app.set("trust proxy", true);
   app.disable("x-powered-by");
   app.use(helmet({
+    frameguard: false,
     contentSecurityPolicy: {
       useDefaults: true,
       directives: {
@@ -543,12 +554,14 @@ async function startServer() {
         "img-src": ["'self'", "data:", "blob:", "https:", "https://www.facebook.com"],
         "style-src": ["'self'", "'unsafe-inline'"],
         "frame-src": ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com"],
+        "frame-ancestors": ["'self'", "https://*.google.com", "https://*.googleusercontent.com", "https://*.run.app"],
         "object-src": ["'none'"],
         "base-uri": ["'self'"],
         "form-action": ["'self'"]
       }
     },
-    crossOriginEmbedderPolicy: false
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: false
   }));
   app.use(express.json({ limit: "250kb" }));
   app.use((req: Request, res: Response, next) => {
@@ -574,6 +587,17 @@ async function startServer() {
   app.use("/api/products/:id/view", productViewLimiter);
 
   // API Routes
+  app.get("/api/diagnostics", (_req: Request, res: Response) => {
+    res.json({
+      mongodb_uri_present: !!process.env.MONGODB_URI,
+      connection_state: mongoose.connection.readyState, // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+      connection_state_name: ["disconnected", "connected", "connecting", "disconnecting"][mongoose.connection.readyState] || "unknown",
+      last_error: lastMongoError,
+      fallback_active: mongoose.connection.readyState !== 1,
+      hint: mongoose.connection.readyState !== 1 ? "If MONGODB_URI is provided but connection fails, please ensure you have whitelisted 0.0.0.0/0 (allow all IPs) in your MongoDB Atlas Network Access console. Cloud Run uses dynamic IP addresses that change constantly." : "Successfully connected to MongoDB Atlas."
+    });
+  });
+
   app.get("/api/store-settings", async (_req: Request, res: Response) => {
     try {
       const settings = await getStoreSettings();
